@@ -1,6 +1,8 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type Validator interface {
 	ValidateBlock(*Block) error
@@ -19,6 +21,20 @@ func NewBlockValidator(bc *Blockchain) *BlockValidator {
 func (bv *BlockValidator) ValidateBlock(b *Block) error {
 	if bv.bc.HasBlock(b.Height) {
 		return fmt.Errorf("block height %d is invalid", b.Height)
+	}
+
+	if b.Height != bv.bc.Height()+1 {
+		return fmt.Errorf("block(%d) too high", b.Height)
+	}
+
+	prevHeader, err := bv.bc.GetHeader(b.Height - 1)
+	if err != nil {
+		return err
+	}
+
+	hash := BlockHasher{}.Hash(prevHeader)
+	if hash != b.PrevBlockHash {
+		return fmt.Errorf("block(%d) has invalid previous block hash", b.Height)
 	}
 
 	if err := b.Verify(); err != nil {
