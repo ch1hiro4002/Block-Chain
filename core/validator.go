@@ -19,15 +19,15 @@ func NewBlockValidator(bc *Blockchain) *BlockValidator {
 }
 
 func (bv *BlockValidator) ValidateBlock(b *Block) error {
-	if bv.bc.HasBlock(b.Height) {
+	if b.Height <= bv.bc.heightLocked() {
 		return fmt.Errorf("block height %d is invalid", b.Height)
 	}
 
-	if b.Height != bv.bc.Height()+1 {
+	if b.Height != bv.bc.heightLocked()+1 {
 		return fmt.Errorf("block(%d) too high", b.Height)
 	}
 
-	prevHeader, err := bv.bc.GetHeader(b.Height - 1)
+	prevHeader, err := bv.bc.getHeaderLocked(b.Height - 1)
 	if err != nil {
 		return err
 	}
