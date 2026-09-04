@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newBlockchainWithGenesis(t *testing.T) *Blockchain {
-	bc, err := NewBlockchain(randomBlock(0, types.Hash{}))
+func newBlockChainWithGenesis(t *testing.T) *BlockChain {
+	bc, err := NewBlockChain(randomBlock(0, types.Hash{}))
 
 	assert.Nil(t, err)
 	assert.Equal(t, bc.Height(), uint32(0))
@@ -16,25 +16,25 @@ func newBlockchainWithGenesis(t *testing.T) *Blockchain {
 	return bc
 }
 
-func getPrevBlockHash(t *testing.T, bc *Blockchain, height uint32) types.Hash {
+func getPrevBlockHash(t *testing.T, bc *BlockChain, height uint32) types.Hash {
 	header, err := bc.GetHeader(height - 1)
 	assert.Nil(t, err)
 
 	return BlockHasher{}.Hash(header)
 }
 
-func TestNewBlockchain(t *testing.T) {
-	bc := newBlockchainWithGenesis(t)
+func TestNewBlockChain(t *testing.T) {
+	bc := newBlockChainWithGenesis(t)
 	assert.NotNil(t, bc)
 }
 
-func TestBlockchain_HasBlock(t *testing.T) {
-	bc := newBlockchainWithGenesis(t)
+func TestBlockChain_HasBlock(t *testing.T) {
+	bc := newBlockChainWithGenesis(t)
 	assert.True(t, bc.HasBlock(0))
 }
 
-func TestBlockchain_AddBlock(t *testing.T) {
-	bc := newBlockchainWithGenesis(t)
+func TestBlockChain_AddBlock(t *testing.T) {
+	bc := newBlockChainWithGenesis(t)
 
 	lenBlocks := 5
 	for i := 0; i < lenBlocks; i++ {

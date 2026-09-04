@@ -2,14 +2,40 @@ package core
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ch1hiro4002/Block-Chain/crypto"
+	"github.com/ch1hiro4002/Block-Chain/types"
 )
 
 type Transaction struct {
 	Data      []byte
-	Signer    crypto.PublicKey
+	From      crypto.PublicKey
 	Signature *crypto.Signature
+	hash      types.Hash
+	time      time.Time	// Time first seen locally
+}
+
+func NewTransaction(data []byte) *Transaction {
+	return &Transaction{
+		Data: data,
+	}
+}
+
+func (tx *Transaction) SetTime(t time.Time) {
+	tx.time = t
+}
+
+func (tx *Transaction) Time() time.Time {
+	return tx.time
+}
+
+func (tx *Transaction) Hash(hasher Hasher[*Transaction]) types.Hash {
+	if tx.hash.IsZero() {
+		tx.hash = hasher.Hash(tx)
+	}
+
+	return tx.hash
 }
 
 func (tx *Transaction) Sign(privateKey crypto.PrivateKey) error {
@@ -19,7 +45,7 @@ func (tx *Transaction) Sign(privateKey crypto.PrivateKey) error {
 	}
 
 	tx.Signature = sig
-	tx.Signer = privateKey.PublicKey()
+	tx.From = privateKey.PublicKey()
 
 	return nil
 }
@@ -29,7 +55,7 @@ func (tx *Transaction) Verify() error {
 		return fmt.Errorf("this transaction has no signature")
 	}
 
-	if !tx.Signature.Verify(tx.Signer, tx.Data) {
+	if !tx.Signature.Verify(tx.From, tx.Data) {
 		return fmt.Errorf("invalid signature")
 	}
 

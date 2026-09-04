@@ -7,15 +7,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type Blockchain struct {
+type BlockChain struct {
 	store     Storage
 	headers   []*Header
 	validator Validator
 	lock      sync.RWMutex
 }
 
-func NewBlockchain(genesis *Block) (*Blockchain, error) {
-	bc := &Blockchain{
+func NewBlockChain(genesis *Block) (*BlockChain, error) {
+	bc := &BlockChain{
 		store:   NewMemoryStore(),
 		headers: []*Header{},
 	}
@@ -26,11 +26,11 @@ func NewBlockchain(genesis *Block) (*Blockchain, error) {
 	return bc, err
 }
 
-func (bc *Blockchain) SetValidator(v Validator) {
+func (bc *BlockChain) SetValidator(v Validator) {
 	bc.validator = v
 }
 
-func (bc *Blockchain) AddBlock(block *Block) error {
+func (bc *BlockChain) AddBlock(block *Block) error {
 	bc.lock.Lock()
 	defer bc.lock.Unlock()
 
@@ -42,38 +42,38 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 	return bc.addBlockWithoutValidation(block)
 }
 
-func (bc *Blockchain) Height() uint32 {
+func (bc *BlockChain) Height() uint32 {
 	bc.lock.RLock()
 	defer bc.lock.RUnlock()
 
 	return bc.heightLocked()
 }
 
-func (bc *Blockchain) HasBlock(height uint32) bool {
+func (bc *BlockChain) HasBlock(height uint32) bool {
 	return height <= bc.Height()
 }
 
-func (bc *Blockchain) GetHeader(height uint32) (*Header, error) {
+func (bc *BlockChain) GetHeader(height uint32) (*Header, error) {
 	bc.lock.RLock()
 	defer bc.lock.RUnlock()
 
 	return bc.getHeaderLocked(height)
 }
 
-func (bc *Blockchain) addBlockWithoutValidation(b *Block) error {
+func (bc *BlockChain) addBlockWithoutValidation(b *Block) error {
 	bc.headers = append(bc.headers, b.Header)
 
 	logrus.WithFields(logrus.Fields{
 		"height":    b.Height,
 		"hash":      b.Hash(BlockHasher{}),
 		"prev_hash": b.PrevBlockHash,
-	}).Info("Adding new block to blockchain")
+	}).Info("Adding new block to BlockChain")
 
 	err := bc.store.Put(b)
 	return err
 }
 
-func (bc *Blockchain) heightLocked() uint32 {
+func (bc *BlockChain) heightLocked() uint32 {
 	if len(bc.headers) == 0 {
 		return 0
 	}
@@ -81,7 +81,7 @@ func (bc *Blockchain) heightLocked() uint32 {
 	return uint32(len(bc.headers) - 1)
 }
 
-func (bc *Blockchain) getHeaderLocked(height uint32) (*Header, error) {
+func (bc *BlockChain) getHeaderLocked(height uint32) (*Header, error) {
 	if height > bc.heightLocked() {
 		return nil, fmt.Errorf("given height (%d) too high", height)
 	}
