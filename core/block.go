@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"io"
 
 	"github.com/ch1hiro4002/Block-Chain/crypto"
 	"github.com/ch1hiro4002/Block-Chain/types"
@@ -12,7 +11,7 @@ import (
 
 type Header struct {
 	Version       uint32
-	DataHash      types.Hash
+	TxHash        types.Hash
 	PrevBlockHash types.Hash
 	Timestamp     int64
 	Height        uint32
@@ -76,12 +75,12 @@ func (b *Block) Verify() error {
 	return nil
 }
 
-func (b *Block) Encode(w io.Writer, enc Encoder[*Block]) error {
-	return enc.Encode(w, b)
+func (b *Block) Encode(enc Encoder[*Block]) error {
+	return enc.Encode(b)
 }
 
-func (b *Block) Decode(r io.Reader, dec Decoder[*Block]) error {
-	return dec.Decode(r, b)
+func (b *Block) Decode(dec Decoder[*Block]) error {
+	return dec.Decode(b)
 }
 
 func (b *Block) Hash(hasher Hasher[*Header]) types.Hash {
