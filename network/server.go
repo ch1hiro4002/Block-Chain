@@ -9,9 +9,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var defaultBlockTime = 5 * time.Second
+var defaultBlockTime = 10 * time.Second
 
 type ServerOpts struct {
+	RPCHandler RPCHandler
 	Transports []Transport
 	BlockTime  time.Duration
 	PrivateKey *crypto.PrivateKey
@@ -26,26 +27,36 @@ type Server struct {
 }
 
 func NewServer(opts ServerOpts) *Server {
-	return &Server{
+	server := &Server{
 		ServerOpts:  opts,
 		memPool:     NewTxPool(),
 		isValidator: opts.PrivateKey != nil,
 		rpcCh:       make(chan RPC),
 		quitCh:      make(chan struct{}, 1),
 	}
+
+	if server.BlockTime == time.Duration(0) {
+		server.BlockTime = defaultBlockTime
+	}
+
+	if server.RPCHandler == nil {
+		server.RPCHandler = NewDefaultRPCHandler(server)
+	}
+
+	return server
 }
 
 func (s *Server) Strat() {
 	s.initTransports()
-	if s.BlockTime == time.Duration(0) {
-		s.BlockTime = defaultBlockTime
-	}
 	ticker := time.NewTicker(s.BlockTime)
+
 free:
 	for {
 		select {
 		case rpc := <-s.rpcCh:
-			fmt.Printf("%+v\n", rpc)
+			if err := s.RPCHandler.HandleRPC(rpc); err != nil {
+				logrus.Error(err)
+			}
 		case <-ticker.C:
 			s.createNewBlock()
 		case <-s.quitCh:
@@ -56,7 +67,7 @@ free:
 	fmt.Println("Server shutdown!!!")
 }
 
-func (s *Server) HandlerTransaction(tx *core.Transaction) error {
+func (s *Server) ProcessTransaction(from NetAddr, tx *core.Transaction) error {
 	hash := tx.Hash(core.TxHasher{})
 	if s.memPool.HasTransaction(hash) {
 		logrus.WithFields(logrus.Fields{
@@ -70,9 +81,7 @@ func (s *Server) HandlerTransaction(tx *core.Transaction) error {
 		return err
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"hash": tx.Hash(core.TxHasher{}),
-	}).Info("adding a new tx to the mempool")
+	tx.SetTime(time.Now())
 
 	return s.memPool.addTransaction(tx)
 }

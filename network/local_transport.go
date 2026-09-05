@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 )
@@ -32,7 +33,7 @@ func (lt *LocalTransport) Connect(tr Transport) error {
 	return nil
 }
 
-func (lt *LocalTransport) SendMessage(to NetAddr, payload []byte) error {
+func (lt *LocalTransport) SendMessage(to NetAddr, mt MessageType, payload []byte) error {
 	lt.lock.RLock()
 	defer lt.lock.RUnlock()
 
@@ -41,9 +42,12 @@ func (lt *LocalTransport) SendMessage(to NetAddr, payload []byte) error {
 		return fmt.Errorf("peer %s not connected", to)
 	}
 
+	msg := NewMessage(mt, payload)
+	msgData := msg.Bytes()
+
 	peer.consumeCh <- RPC{
 		From:    lt.addr,
-		Payload: payload,
+		Payload: bytes.NewReader(msgData),
 	}
 
 	return nil

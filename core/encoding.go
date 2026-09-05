@@ -11,10 +11,6 @@ type Encoder[T any] interface {
 	Encode(T) error
 }
 
-type Decoder[T any] interface {
-	Decode(T) error
-}
-
 type GobTxEncoder struct {
 	w io.Writer
 }
@@ -50,6 +46,10 @@ func (e *GobTxEncoder) Encode(tx *Transaction) error {
 	}
 
 	return gob.NewEncoder(e.w).Encode(w)
+}
+
+type Decoder[T any] interface {
+	Decode(T) error
 }
 
 type GobTxDecoder struct {

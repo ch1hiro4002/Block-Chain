@@ -32,5 +32,5 @@ func TestSendMessage(t *testing.T) {
 		assert.Equal(t, rpc.From, tra.Addr())
 	}()
 
-	assert.Nil(t, tra.SendMessage("B", msg))
+	assert.Nil(t, tra.SendMessage("B", MessageTypeTx, msg))
 }

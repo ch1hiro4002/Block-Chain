@@ -5,12 +5,12 @@ import (
 
 	"github.com/ch1hiro4002/Block-Chain/core"
 	"github.com/ch1hiro4002/Block-Chain/types"
+	"github.com/sirupsen/logrus"
 )
 
 type TxMapSorter struct {
 	transactions []*core.Transaction
 }
-
 
 // returns an ascending order *TxMapSorter slice.
 func newTxMapSorter(txMap map[types.Hash]*core.Transaction) *TxMapSorter {
@@ -45,7 +45,7 @@ type TxPool struct {
 }
 
 func NewTxPool() *TxPool {
-	return &TxPool {
+	return &TxPool{
 		transactions: make(map[types.Hash]*core.Transaction),
 	}
 }
@@ -60,11 +60,16 @@ func (tp *TxPool) addTransaction(tx *core.Transaction) error {
 
 	tp.transactions[hash] = tx
 
+	logrus.WithFields(logrus.Fields{
+		"hash":           tx.Hash(core.TxHasher{}),
+		"mempool length": tp.Len(),
+	}).Info("adding a new tx to the mempool")
+
 	return nil
 }
 
 func (tp *TxPool) HasTransaction(hash types.Hash) bool {
-	_, ok := tp.transactions[hash] 
+	_, ok := tp.transactions[hash]
 	return ok
 }
 
