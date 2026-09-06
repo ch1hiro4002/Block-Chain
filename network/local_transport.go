@@ -33,7 +33,7 @@ func (lt *LocalTransport) Connect(tr Transport) error {
 	return nil
 }
 
-func (lt *LocalTransport) SendMessage(to NetAddr, mt MessageType, payload []byte) error {
+func (lt *LocalTransport) SendMessage(to NetAddr, payload []byte) error {
 	lt.lock.RLock()
 	defer lt.lock.RUnlock()
 
@@ -42,12 +42,19 @@ func (lt *LocalTransport) SendMessage(to NetAddr, mt MessageType, payload []byte
 		return fmt.Errorf("peer %s not connected", to)
 	}
 
-	msg := NewMessage(mt, payload)
-	msgData := msg.Bytes()
-
 	peer.consumeCh <- RPC{
 		From:    lt.addr,
-		Payload: bytes.NewReader(msgData),
+		Payload: bytes.NewReader(payload),
+	}
+
+	return nil
+}
+
+func (lt *LocalTransport) Broadcast(payload []byte) error {
+	for _, peer := range lt.peers {
+		if err := lt.SendMessage(peer.Addr(), payload); err != nil {
+			return fmt.Errorf("failed to send message: %v", err)
+		}
 	}
 
 	return nil

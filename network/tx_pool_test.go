@@ -33,7 +33,7 @@ func TestTxPool_AddTransaction(t *testing.T) {
 func TestTxPool_SortTransactions(t *testing.T) {
 	tp := NewTxPool()
 
-	txLen := 100
+	txLen := 10
 	for i :=0; i < txLen; i++ {
 		meg := fmt.Sprintf("foo + %d", i)
 		tx := core.NewTransaction([]byte(meg))

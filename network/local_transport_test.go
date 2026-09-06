@@ -1,12 +1,13 @@
 package network
 
 import (
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestConnect(t *testing.T) {
+func TestTransport_Connect(t *testing.T) {
 	tra := NewLocalTransport("A")
 	trb := NewLocalTransport("B")
 
@@ -17,7 +18,7 @@ func TestConnect(t *testing.T) {
 	assert.Equal(t, trb.(*LocalTransport).peers["A"], tra)
 }
 
-func TestSendMessage(t *testing.T) {
+func TestTransport_SendMessage(t *testing.T) {
 	tra := NewLocalTransport("A")
 	trb := NewLocalTransport("B")
 
@@ -25,12 +26,33 @@ func TestSendMessage(t *testing.T) {
 	trb.Connect(tra)
 
 	msg := []byte("Hello from A to B")
+	assert.Nil(t, tra.SendMessage(trb.Addr(), msg))
 
-	go func() {
-		rpc := <-trb.Consume()
-		assert.Equal(t, rpc.Payload, msg)
-		assert.Equal(t, rpc.From, tra.Addr())
-	}()
+	rpc := <-trb.Consume()
+	b, err := io.ReadAll(rpc.Payload)
+	assert.Nil(t, err)
+	assert.Equal(t, msg, b)
+	assert.Equal(t, rpc.From, tra.Addr())
+}
 
-	assert.Nil(t, tra.SendMessage("B", MessageTypeTx, msg))
+func TestTransport_Broadcast(t *testing.T) {
+	tra := NewLocalTransport("A")
+	trb := NewLocalTransport("B")
+	trc := NewLocalTransport("C")
+
+	tra.Connect(trb)
+	tra.Connect(trc)
+
+	msg := []byte("Transaction_A")
+	assert.Nil(t, tra.Broadcast(msg))
+
+	rpcb := <-trb.Consume()
+	b, err := io.ReadAll(rpcb.Payload)
+	assert.Nil(t, err)
+	assert.Equal(t, msg, b)
+
+	rpcc := <-trc.Consume()
+	c, err := io.ReadAll(rpcc.Payload)
+	assert.Nil(t, err)
+	assert.Equal(t, msg, c)
 }

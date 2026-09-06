@@ -8,7 +8,6 @@ import (
 	"github.com/ch1hiro4002/Block-Chain/core"
 	"github.com/ch1hiro4002/Block-Chain/crypto"
 	"github.com/ch1hiro4002/Block-Chain/network"
-	"github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -20,11 +19,7 @@ func main() {
 
 	go func() {
 		for {
-			payload, err := createTxByte()
-			if err != nil {
-				logrus.Error(err)
-			}
-			trRemote.SendMessage(trLocal.Addr(), network.MessageTypeTx, payload)
+			trRemote.SendMessage(trLocal.Addr(), createTxMessage())
 			time.Sleep(3 * time.Second)
 		}
 	}()
@@ -37,20 +32,21 @@ func main() {
 	s.Strat()
 }
 
-func createTxByte() ([]byte, error) {
+func createTxMessage() []byte {
 	privKey := crypto.GeneratePrivateKey()
+
 	data := make([]byte, 32)
 	rand.Read(data)
+
 	tx := core.NewTransaction(data)
 	tx.Sign(privKey)
-	tx.Hash(core.TxHasher{})
-	tx.SetTime(time.Now())
 
 	buf := &bytes.Buffer{}
 	if err := tx.Encode(core.NewGobTxEncoder(buf)); err != nil {
-		return nil, err
+		return nil
 	}
 
-	return buf.Bytes(), nil
-}
+	msg := network.NewMessage(network.MessageTypeTx, buf.Bytes())
 
+	return msg.Bytes()
+}
