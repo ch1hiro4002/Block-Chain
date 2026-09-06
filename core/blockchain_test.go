@@ -8,7 +8,7 @@ import (
 )
 
 func newBlockChainWithGenesis(t *testing.T) *BlockChain {
-	bc, err := NewBlockChain(randomBlock(0, types.Hash{}))
+	bc, err := NewBlockChain()
 
 	assert.Nil(t, err)
 	assert.Equal(t, bc.Height(), uint32(0))
@@ -38,7 +38,7 @@ func TestBlockChain_AddBlock(t *testing.T) {
 
 	lenBlocks := 5
 	for i := 0; i < lenBlocks; i++ {
-		block := randomBlockWithSignature(t, uint32(i + 1), getPrevBlockHash(t, bc, uint32(i + 1)))
+		block := randomBlock(t, uint32(i + 1), getPrevBlockHash(t, bc, uint32(i + 1)))
 		bc.AddBlock(block)
 	}
 
@@ -46,8 +46,8 @@ func TestBlockChain_AddBlock(t *testing.T) {
 	assert.Equal(t, len(bc.headers), lenBlocks+1)
 
 	// Adding a duplicate block should return an error
-	assert.NotNil(t, bc.AddBlock(randomBlockWithSignature(t, uint32(lenBlocks), getPrevBlockHash(t, bc, uint32(lenBlocks)))))
+	assert.NotNil(t, bc.AddBlock(randomBlock(t, uint32(lenBlocks), getPrevBlockHash(t, bc, uint32(lenBlocks)))))
 
 	// Adding a block with a height that is too high should return an error
-	assert.NotNil(t, bc.AddBlock(randomBlockWithSignature(t, 102, types.RandomHash())))
+	assert.NotNil(t, bc.AddBlock(randomBlock(t, 102, types.RandomHash())))
 }

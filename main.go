@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"log"
 	"time"
 
 	"github.com/ch1hiro4002/Block-Chain/core"
@@ -20,15 +21,22 @@ func main() {
 	go func() {
 		for {
 			trRemote.SendMessage(trLocal.Addr(), createTxMessage())
-			time.Sleep(3 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 	}()
 
+
+	privKey := crypto.GeneratePrivateKey()
 	opts := network.ServerOpts{
+		ID: "LOCAL",
 		Transports: []network.Transport{trLocal},
+		PrivateKey: &privKey,
 	}
 
-	s := network.NewServer(opts)
+	s, err := network.NewServer(opts)
+	if err != nil {
+		log.Fatal(err)
+	}
 	s.Strat()
 }
 

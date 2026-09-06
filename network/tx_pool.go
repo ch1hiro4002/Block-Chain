@@ -5,7 +5,6 @@ import (
 
 	"github.com/ch1hiro4002/Block-Chain/core"
 	"github.com/ch1hiro4002/Block-Chain/types"
-	"github.com/sirupsen/logrus"
 )
 
 type TxMapSorter struct {
@@ -59,11 +58,6 @@ func (tp *TxPool) addTransaction(tx *core.Transaction) error {
 	hash := tx.Hash(core.TxHasher{})
 
 	tp.transactions[hash] = tx
-
-	logrus.WithFields(logrus.Fields{
-		"hash":           tx.Hash(core.TxHasher{}),
-		"mempool length": tp.Len(),
-	}).Info("adding a new tx to the mempool")
 
 	return nil
 }

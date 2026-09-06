@@ -23,7 +23,7 @@ func (bv *BlockValidator) ValidateBlock(b *Block) error {
 		return fmt.Errorf("block height %d is invalid", b.Height)
 	}
 
-	if b.Height != bv.bc.heightLocked()+1 {
+	if b.Height != bv.bc.heightLocked() + 1 {
 		return fmt.Errorf("block(%d) too high", b.Height)
 	}
 

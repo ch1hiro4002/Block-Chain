@@ -14,16 +14,22 @@ type BlockChain struct {
 	lock      sync.RWMutex
 }
 
-func NewBlockChain(genesis *Block) (*BlockChain, error) {
+func NewBlockChain() (*BlockChain, error) {
 	bc := &BlockChain{
 		store:   NewMemoryStore(),
 		headers: []*Header{},
 	}
 	bc.validator = NewBlockValidator(bc)
 
-	err := bc.addBlockWithoutValidation(genesis)
+	genesis, err := newGenesisBlock()
+	if err != nil {
+		return nil,err
+	}
+	if err := bc.addBlockWithoutValidation(genesis); err != nil {
+		return nil, err
+	}
 
-	return bc, err
+	return bc, nil
 }
 
 func (bc *BlockChain) SetValidator(v Validator) {
