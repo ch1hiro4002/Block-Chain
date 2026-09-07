@@ -59,7 +59,7 @@ func (bc *BlockChain) AddBlock(block *Block) error {
 			return err
 		}
 
-		bc.Logger.Log("vm result:", vm.stack[vm.sp])
+		bc.Logger.Log("vm result:", vm.stack.data[vm.stack.sp])
 	}
 
 	return bc.addBlockWithoutValidation(block)
