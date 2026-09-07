@@ -45,8 +45,6 @@ func NewServer(opts ServerOpts) (*Server, error) {
 		opts.Logger = log.With(opts.Logger, "ID", opts.ID)
 	}
 
-
-
 	blockchain, err := core.NewBlockChain(opts.Logger)
 	if err != nil {
 		return nil, err
@@ -114,7 +112,9 @@ func (s *Server) validatorLoop() {
 
 	for {
 		<-ticker.C
-		s.createNewBlock()
+		if err := s.createNewBlock(); err != nil {
+			s.Logger.Log("msg", "failed to create new block", "err", err)
+		}
 	}
 }
 
@@ -122,6 +122,8 @@ func (s *Server) ProcessMessage(msg *DecodeMessage) error {
 	switch t := msg.Data.(type) {
 	case *core.Transaction:
 		return s.processTransaction(t)
+	case *core.Block:
+		return s.processBlock(t)
 	}
 
 	return nil
@@ -130,7 +132,6 @@ func (s *Server) ProcessMessage(msg *DecodeMessage) error {
 func (s *Server) processTransaction(tx *core.Transaction) error {
 	hash := tx.Hash(core.TxHasher{})
 	if s.memPool.Contains(hash) {
-		s.Logger.Log("msg", "transaction already in mempool")
 		return nil
 	}
 
@@ -163,8 +164,26 @@ func (s *Server) broadcastTransaction(tx *core.Transaction) error {
 	return s.broadcast(msg.Bytes())
 }
 
-func (s *Server) broadcastBlock(block *core.Block) error {
+func (s *Server) processBlock(block *core.Block) error {
+	if err := s.chain.AddBlock(block); err != nil {
+		return nil
+	}
+
+	go s.broadcastBlock(block)
+
 	return nil
+}
+
+func (s *Server) broadcastBlock(block *core.Block) error {
+	buf := &bytes.Buffer{}
+	err := block.Encode(core.NewGobBlockEncoder(buf))
+	if err != nil {
+		return err
+	}
+
+	msg := NewMessage(MessageTypeBlock, buf.Bytes())
+
+	return s.broadcast(msg.Bytes())
 }
 
 func (s *Server) broadcast(payload []byte) error {
@@ -199,6 +218,8 @@ func (s *Server) createNewBlock() error {
 	}
 
 	s.memPool.ClearPending()
+
+	s.broadcastBlock(block)
 
 	return nil
 }
