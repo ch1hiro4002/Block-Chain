@@ -1,10 +1,9 @@
 package types
 
 import (
-	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 )
-
 
 type Hash [32]byte
 
@@ -17,17 +16,28 @@ func (h Hash) IsZero() bool {
 	return true
 }
 
+func (h Hash) ToSlice() []byte {
+	b := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		b[i] = h[i]
+	}
+	return b
+}
+
 func (h Hash) String() string {
 	return hex.EncodeToString(h[:])
 }
 
+func HashFromBytes(b []byte) Hash {
+	if len(b) != 32 {
+		msg := fmt.Sprintf("given bytes with length %d should be 32", len(b))
+		panic(msg)
+	}
 
-func RandomBytes(size int) []byte {
-	token := make([]byte, size)
-	rand.Read(token)
-	return token
-}
+	var value [32]uint8
+	for i := 0; i < 32; i++ {
+		value[i] = b[i]
+	}
 
-func RandomHash() Hash {
-	return Hash(RandomBytes(32))
+	return Hash(value)
 }

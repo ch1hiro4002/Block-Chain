@@ -11,7 +11,7 @@ import (
 )
 
 func TestBlock_Hash(t *testing.T) {
-	PrevBlockHash := types.RandomHash()
+	PrevBlockHash := types.Hash{}
 	for i := 0; i < 5; i++ {
 		block := randomBlock(t, uint32(i), PrevBlockHash)
 		PrevBlockHash = block.PrevBlockHash
@@ -21,14 +21,14 @@ func TestBlock_Hash(t *testing.T) {
 
 func TestBlock_Sign(t *testing.T) {
 	privateKey := crypto.GeneratePrivateKey()
-	block := randomBlock(t, 66, types.RandomHash())
+	block := randomBlock(t, 66, types.Hash{})
 
 	assert.Nil(t, block.Sign(privateKey))
 }
 
 func TestBlock_Verify(t *testing.T) {
 	privateKey := crypto.GeneratePrivateKey()
-	block := randomBlock(t, 66, types.RandomHash())
+	block := randomBlock(t, 66, types.Hash{})
 
 	assert.Nil(t, block.Sign(privateKey))
 	assert.Nil(t, block.Verify())

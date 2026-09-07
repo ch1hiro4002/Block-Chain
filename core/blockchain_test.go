@@ -1,14 +1,16 @@
 package core
 
 import (
+	"os"
 	"testing"
 
 	"github.com/ch1hiro4002/Block-Chain/types"
+	"github.com/go-kit/log"
 	"github.com/stretchr/testify/assert"
 )
 
 func newBlockChainWithGenesis(t *testing.T) *BlockChain {
-	bc, err := NewBlockChain()
+	bc, err := NewBlockChain(log.NewLogfmtLogger(os.Stderr))
 
 	assert.Nil(t, err)
 	assert.Equal(t, bc.Height(), uint32(0))
@@ -49,5 +51,5 @@ func TestBlockChain_AddBlock(t *testing.T) {
 	assert.NotNil(t, bc.AddBlock(randomBlock(t, uint32(lenBlocks), getPrevBlockHash(t, bc, uint32(lenBlocks)))))
 
 	// Adding a block with a height that is too high should return an error
-	assert.NotNil(t, bc.AddBlock(randomBlock(t, 102, types.RandomHash())))
+	assert.NotNil(t, bc.AddBlock(randomBlock(t, 102, types.Hash{})))
 }

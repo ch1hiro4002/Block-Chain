@@ -1,76 +1,121 @@
 package network
 
 import (
-	"sort"
+	"sync"
 
 	"github.com/ch1hiro4002/Block-Chain/core"
 	"github.com/ch1hiro4002/Block-Chain/types"
 )
 
-type TxMapSorter struct {
-	transactions []*core.Transaction
-}
-
-// returns an ascending order *TxMapSorter slice.
-func newTxMapSorter(txMap map[types.Hash]*core.Transaction) *TxMapSorter {
-	txs := make([]*core.Transaction, len(txMap))
-
-	i := 0
-	for _, val := range txMap {
-		txs[i] = val
-		i++
-	}
-
-	s := &TxMapSorter{txs}
-	sort.Sort(s)
-
-	return s
-}
-
-func (tms *TxMapSorter) Len() int {
-	return len(tms.transactions)
-}
-
-func (tms *TxMapSorter) Swap(i, j int) {
-	tms.transactions[i], tms.transactions[j] = tms.transactions[j], tms.transactions[i]
-}
-
-func (tms *TxMapSorter) Less(i, j int) bool {
-	return tms.transactions[i].Time().Before(tms.transactions[j].Time())
-}
-
 type TxPool struct {
-	transactions map[types.Hash]*core.Transaction
+	all       *TxSortedMap
+	pending   *TxSortedMap
+	maxLength int
 }
 
-func NewTxPool() *TxPool {
+func NewTxPool(maxLength int) *TxPool {
 	return &TxPool{
-		transactions: make(map[types.Hash]*core.Transaction),
+		all:       NewTxSortedMap(),
+		pending:   NewTxSortedMap(),
+		maxLength: maxLength,
 	}
 }
 
-func (tp *TxPool) Transactions() []*core.Transaction {
-	tms := newTxMapSorter(tp.transactions)
-	return tms.transactions
+func (tp *TxPool) Add(tx *core.Transaction) {
+	if tp.all.Count() == tp.maxLength {
+		oldest := tp.all.First()
+		tp.all.Remove(oldest.Hash(core.TxHasher{}))
+	}
+
+	if !tp.all.Contains(tx.Hash(core.TxHasher{})) {
+		tp.all.Add(tx)
+		tp.pending.Add(tx)
+	}
 }
 
-func (tp *TxPool) addTransaction(tx *core.Transaction) error {
+func (tp *TxPool) ClearPending() {
+	tp.pending.Clear()
+}
+
+func (tp *TxPool) Contains(hash types.Hash) bool {
+	return tp.all.Contains(hash)
+}
+
+func (tp *TxPool) Pending() []*core.Transaction {
+	return tp.pending.txs.Data
+}
+
+func (tp *TxPool) PendingCount() int {
+	return tp.pending.Count()
+}
+
+type TxSortedMap struct {
+	lock   sync.RWMutex
+	lookup map[types.Hash]*core.Transaction
+	txs    *types.List[*core.Transaction]
+}
+
+func NewTxSortedMap() *TxSortedMap {
+	return &TxSortedMap{
+		lookup: make(map[types.Hash]*core.Transaction),
+		txs:    types.NewList[*core.Transaction](),
+	}
+}
+
+func (t *TxSortedMap) First() *core.Transaction {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+
+	first := t.txs.Get(0)
+	return t.lookup[first.Hash(core.TxHasher{})]
+}
+
+func (t *TxSortedMap) Get(h types.Hash) *core.Transaction {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+
+	return t.lookup[h]
+}
+
+func (t *TxSortedMap) Add(tx *core.Transaction) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	hash := tx.Hash(core.TxHasher{})
 
-	tp.transactions[hash] = tx
-
-	return nil
+	if _, ok := t.lookup[hash]; !ok {
+		t.lookup[hash] = tx
+		t.txs.Insert(tx)
+	}
 }
 
-func (tp *TxPool) HasTransaction(hash types.Hash) bool {
-	_, ok := tp.transactions[hash]
+func (t *TxSortedMap) Remove(h types.Hash) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	t.txs.Remove(t.lookup[h])
+	delete(t.lookup, h)
+}
+
+func (t *TxSortedMap) Clear() {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	t.lookup = make(map[types.Hash]*core.Transaction)
+	t.txs.Clear()
+}
+
+func (t *TxSortedMap) Count() int {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+
+	return len(t.lookup)
+}
+
+func (t *TxSortedMap) Contains(h types.Hash) bool {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+
+	_, ok := t.lookup[h]
 	return ok
-}
-
-func (tp *TxPool) Len() int {
-	return len(tp.transactions)
-}
-
-func (tp *TxPool) Flush() {
-	tp.transactions = make(map[types.Hash]*core.Transaction)
 }

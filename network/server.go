@@ -45,14 +45,16 @@ func NewServer(opts ServerOpts) (*Server, error) {
 		opts.Logger = log.With(opts.Logger, "ID", opts.ID)
 	}
 
-	blockchain, err := core.NewBlockChain()
+
+
+	blockchain, err := core.NewBlockChain(opts.Logger)
 	if err != nil {
 		return nil, err
 	}
 	server := &Server{
 		ServerOpts:  opts,
 		chain:       blockchain,
-		memPool:     NewTxPool(),
+		memPool:     NewTxPool(100),
 		isValidator: opts.PrivateKey != nil,
 		rpcCh:       make(chan RPC),
 		quitCh:      make(chan struct{}, 1),
@@ -110,11 +112,9 @@ func (s *Server) validatorLoop() {
 		"blocktime", s.BlockTime,
 	)
 
-	
-
 	for {
 		<-ticker.C
-		s.createNewBlock(nil)
+		s.createNewBlock()
 	}
 }
 
@@ -129,7 +129,7 @@ func (s *Server) ProcessMessage(msg *DecodeMessage) error {
 
 func (s *Server) processTransaction(tx *core.Transaction) error {
 	hash := tx.Hash(core.TxHasher{})
-	if s.memPool.HasTransaction(hash) {
+	if s.memPool.Contains(hash) {
 		s.Logger.Log("msg", "transaction already in mempool")
 		return nil
 	}
@@ -145,10 +145,12 @@ func (s *Server) processTransaction(tx *core.Transaction) error {
 	s.Logger.Log(
 		"msg", "adding new tx to mempool",
 		"hash", hash,
-		"mempoolLength", s.memPool.Len(),
+		"mempoolPengding", s.memPool.PendingCount(),
 	)
 
-	return s.memPool.addTransaction(tx)
+	s.memPool.Add(tx)
+
+	return nil
 }
 
 func (s *Server) broadcastTransaction(tx *core.Transaction) error {
@@ -161,6 +163,10 @@ func (s *Server) broadcastTransaction(tx *core.Transaction) error {
 	return s.broadcast(msg.Bytes())
 }
 
+func (s *Server) broadcastBlock(block *core.Block) error {
+	return nil
+}
+
 func (s *Server) broadcast(payload []byte) error {
 	for _, ts := range s.Transports {
 		if err := ts.Broadcast(payload); err != nil {
@@ -171,11 +177,13 @@ func (s *Server) broadcast(payload []byte) error {
 	return nil
 }
 
-func (s *Server) createNewBlock(txs []*core.Transaction) error {
+func (s *Server) createNewBlock() error {
 	currentHeader, err := s.chain.GetHeader(s.chain.Height())
 	if err != nil {
 		return err
 	}
+
+	txs := s.memPool.Pending()
 
 	block, err := core.NewBlockFromPrevHeader(currentHeader, txs)
 	if err != nil {
@@ -189,6 +197,8 @@ func (s *Server) createNewBlock(txs []*core.Transaction) error {
 	if err := s.chain.AddBlock(block); err != nil {
 		return err
 	}
+
+	s.memPool.ClearPending()
 
 	return nil
 }

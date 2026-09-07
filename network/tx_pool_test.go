@@ -1,52 +1,107 @@
 package network
 
 import (
-	"math/rand/v2"
-	"fmt"
 	"testing"
-	"time"
 
 	"github.com/ch1hiro4002/Block-Chain/core"
+	"github.com/ch1hiro4002/Block-Chain/util"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewTxPool(t *testing.T) {
-	tp := NewTxPool()
-	assert.Equal(t, tp.Len(), 0)
+func TestTxMaxLength(t *testing.T) {
+	p := NewTxPool(1)
+	p.Add(util.NewRandomTransaction(10))
+	assert.Equal(t, 1, p.all.Count())
+
+	p.Add(util.NewRandomTransaction(10))
+	p.Add(util.NewRandomTransaction(10))
+	p.Add(util.NewRandomTransaction(10))
+	tx := util.NewRandomTransaction(100)
+	p.Add(tx)
+	assert.Equal(t, 1, p.all.Count())
+	assert.True(t, p.Contains(tx.Hash(core.TxHasher{})))
 }
 
-func TestTxPool_AddTransaction(t *testing.T) {
-	tp := NewTxPool()
-	assert.Equal(t, tp.Len(), 0)
+func TestTxPoolAdd(t *testing.T) {
+	p := NewTxPool(11)
+	n := 10
 
-	tx := core.NewTransaction([]byte("test transaction"))
-	assert.Nil(t, tp.addTransaction(tx))
-	assert.Equal(t, tp.Len(), 1)
+	for i := 1; i <= n; i++ {
+		tx := util.NewRandomTransaction(100)
+		p.Add(tx)
+		// cannot add twice
+		p.Add(tx)
 
-	assert.Nil(t, tp.addTransaction(tx))
-	assert.Equal(t, tp.Len(), 1)
-
-	tp.Flush()
-	assert.Equal(t, tp.Len(), 0)
+		assert.Equal(t, i, p.PendingCount())
+		assert.Equal(t, i, p.pending.Count())
+		assert.Equal(t, i, p.all.Count())
+	}
 }
 
-func TestTxPool_SortTransactions(t *testing.T) {
-	tp := NewTxPool()
+func TestTxPoolMaxLength(t *testing.T) {
+	maxLen := 10
+	p := NewTxPool(maxLen)
+	n := 100
+	txx := []*core.Transaction{}
 
-	txLen := 10
-	for i :=0; i < txLen; i++ {
-		meg := fmt.Sprintf("foo + %d", i)
-		tx := core.NewTransaction([]byte(meg))
-		tx.SetTime(time.Unix(rand.Int64N(1000000), 0))
-		assert.Nil(t, tp.addTransaction(tx))
+	for i := 0; i < n; i++ {
+		tx := util.NewRandomTransaction(100)
+		p.Add(tx)
+
+		if i > n-(maxLen+1) {
+			txx = append(txx, tx)
+		}
 	}
 
-	assert.Equal(t, txLen, tp.Len())
+	assert.Equal(t, p.all.Count(), maxLen)
+	assert.Equal(t, len(txx), maxLen)
 
-	txs := tp.Transactions()
-	for i := 0; i + 1 < len(txs); i++ {
-		assert.True(t, txs[i].Time().Before(txs[i+1].Time()))
+	for _, tx := range txx {
+		assert.True(t, p.Contains(tx.Hash(core.TxHasher{})))
+	}
+}
+
+func TestTxSortedMapFirst(t *testing.T) {
+	m := NewTxSortedMap()
+	first := util.NewRandomTransaction(100)
+	m.Add(first)
+	m.Add(util.NewRandomTransaction(10))
+	m.Add(util.NewRandomTransaction(10))
+	m.Add(util.NewRandomTransaction(10))
+	m.Add(util.NewRandomTransaction(10))
+	assert.Equal(t, first, m.First())
+}
+
+func TestTxSortedMapAdd(t *testing.T) {
+	m := NewTxSortedMap()
+	n := 100
+
+	for i := 0; i < n; i++ {
+		tx := util.NewRandomTransaction(100)
+		m.Add(tx)
+		// cannot add the same twice
+		m.Add(tx)
+
+		assert.Equal(t, m.Count(), i+1)
+		assert.True(t, m.Contains(tx.Hash(core.TxHasher{})))
+		assert.Equal(t, len(m.lookup), m.txs.Len())
+		assert.Equal(t, m.Get(tx.Hash(core.TxHasher{})), tx)
 	}
 
+	m.Clear()
+	assert.Equal(t, m.Count(), 0)
+	assert.Equal(t, len(m.lookup), 0)
+	assert.Equal(t, m.txs.Len(), 0)
+}
 
+func TestTxSortedMapRemove(t *testing.T) {
+	m := NewTxSortedMap()
+
+	tx := util.NewRandomTransaction(100)
+	m.Add(tx)
+	assert.Equal(t, m.Count(), 1)
+
+	m.Remove(tx.Hash(core.TxHasher{}))
+	assert.Equal(t, m.Count(), 0)
+	assert.False(t, m.Contains(tx.Hash(core.TxHasher{})))
 }

@@ -39,7 +39,7 @@ func (lt *LocalTransport) SendMessage(to NetAddr, payload []byte) error {
 
 	peer, ok := lt.peers[to]
 	if !ok {
-		return fmt.Errorf("peer %s not connected", to)
+		return fmt.Errorf("%s: could not send message to not connect peer %s", lt.Addr(), to)
 	}
 
 	peer.consumeCh <- RPC{

@@ -90,12 +90,12 @@ func (b *Block) Verify() error {
 		}
 	}
 
-	dataHash, err := CalculateDataHash(b.Transactions)
+	txHash, err := CalculateDataHash(b.Transactions)
 	if err != nil {
 		return fmt.Errorf("falied to calculate datahash: %v", err)
 	}
 
-	if dataHash != b.TxHash {
+	if txHash != b.TxHash {
 		return fmt.Errorf("block (%s) has an invalid data hash", b.Hash(BlockHasher{}))
 	}
 
