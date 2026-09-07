@@ -10,14 +10,14 @@ import (
 
 func TestTxMaxLength(t *testing.T) {
 	p := NewTxPool(1)
-	p.Add(util.NewRandomTransaction(10))
+	p.AddTransaction(util.NewRandomTransaction(10))
 	assert.Equal(t, 1, p.all.Count())
 
-	p.Add(util.NewRandomTransaction(10))
-	p.Add(util.NewRandomTransaction(10))
-	p.Add(util.NewRandomTransaction(10))
+	p.AddTransaction(util.NewRandomTransaction(10))
+	p.AddTransaction(util.NewRandomTransaction(10))
+	p.AddTransaction(util.NewRandomTransaction(10))
 	tx := util.NewRandomTransaction(100)
-	p.Add(tx)
+	p.AddTransaction(tx)
 	assert.Equal(t, 1, p.all.Count())
 	assert.True(t, p.Contains(tx.Hash(core.TxHasher{})))
 }
@@ -28,9 +28,9 @@ func TestTxPoolAdd(t *testing.T) {
 
 	for i := 1; i <= n; i++ {
 		tx := util.NewRandomTransaction(100)
-		p.Add(tx)
+		p.AddTransaction(tx)
 		// cannot add twice
-		p.Add(tx)
+		p.AddTransaction(tx)
 
 		assert.Equal(t, i, p.PendingCount())
 		assert.Equal(t, i, p.pending.Count())
@@ -46,7 +46,7 @@ func TestTxPoolMaxLength(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		tx := util.NewRandomTransaction(100)
-		p.Add(tx)
+		p.AddTransaction(tx)
 
 		if i > n-(maxLen+1) {
 			txx = append(txx, tx)

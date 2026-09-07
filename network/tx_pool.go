@@ -21,7 +21,7 @@ func NewTxPool(maxLength int) *TxPool {
 	}
 }
 
-func (tp *TxPool) Add(tx *core.Transaction) {
+func (tp *TxPool) AddTransaction(tx *core.Transaction) {
 	if tp.all.Count() == tp.maxLength {
 		oldest := tp.all.First()
 		tp.all.Remove(oldest.Hash(core.TxHasher{}))

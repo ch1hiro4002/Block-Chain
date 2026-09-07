@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/rand"
 	"fmt"
 	"log"
 	"time"
@@ -32,9 +31,19 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(2 * time.Second)
 		}
 	}()
+
+	go func() {
+		time.Sleep(6 * time.Second)
+
+		trLatest := network.NewLocalTransport("LATEST_REMOTE")
+		trRemoteC.Connect(trLatest)
+
+		latestServer := makeServer("LATEST_REMOTE", nil, trLatest)
+		latestServer.Strat()
+	} ()
 
 	privKey := crypto.GeneratePrivateKey()
 
@@ -69,8 +78,7 @@ func makeServer(id string, privKey *crypto.PrivateKey, tr network.Transport) *ne
 func createTxMessage() []byte {
 	privKey := crypto.GeneratePrivateKey()
 
-	data := make([]byte, 32)
-	rand.Read(data)
+	data := []byte{0x20, 0x0a, 0x20, 0x0a, 0x0b}
 
 	tx := core.NewTransaction(data)
 	tx.Sign(privKey)

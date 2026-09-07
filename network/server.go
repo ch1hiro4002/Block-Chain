@@ -2,6 +2,7 @@ package network
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"time"
 
@@ -149,7 +150,7 @@ func (s *Server) processTransaction(tx *core.Transaction) error {
 		"mempoolPengding", s.memPool.PendingCount(),
 	)
 
-	s.memPool.Add(tx)
+	s.memPool.AddTransaction(tx)
 
 	return nil
 }
@@ -165,8 +166,13 @@ func (s *Server) broadcastTransaction(tx *core.Transaction) error {
 }
 
 func (s *Server) processBlock(block *core.Block) error {
-	if err := s.chain.AddBlock(block); err != nil {
-		return nil
+	err := s.chain.AddBlock(block)
+	if err != nil {
+		if errors.Is(err, core.ErrBlockAlreadyExists) {
+			return nil
+		}
+
+		return err
 	}
 
 	go s.broadcastBlock(block)

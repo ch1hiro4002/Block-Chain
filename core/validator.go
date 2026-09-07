@@ -1,7 +1,13 @@
 package core
 
 import (
+	"errors"
 	"fmt"
+)
+
+var (
+	ErrBlockAlreadyExists = errors.New("block already exists")
+	ErrBlockTooHigh       = errors.New("block too high")
 )
 
 type Validator interface {
@@ -9,25 +15,36 @@ type Validator interface {
 }
 
 type BlockValidator struct {
-	bc *BlockChain
+	blockchain *BlockChain
 }
 
 func NewBlockValidator(bc *BlockChain) *BlockValidator {
 	return &BlockValidator{
-		bc: bc,
+		blockchain: bc,
 	}
 }
 
 func (bv *BlockValidator) ValidateBlock(b *Block) error {
-	if b.Height <= bv.bc.heightLocked() {
-		return fmt.Errorf("block height %d is invalid", b.Height)
+	if b.Height <= bv.blockchain.heightLocked() {
+		return fmt.Errorf(
+			"%w: height=%d hash=%s",
+			ErrBlockAlreadyExists,
+			b.Height,
+			b.Hash(BlockHasher{}),
+		)
 	}
 
-	if b.Height != bv.bc.heightLocked() + 1 {
-		return fmt.Errorf("block(%d) too high", b.Height)
+	if b.Height != bv.blockchain.heightLocked()+1 {
+		return fmt.Errorf(
+			"%w: height=%d current=%d hash=%s",
+			ErrBlockTooHigh,
+			b.Height,
+			bv.blockchain.heightLocked(),
+			b.Hash(BlockHasher{}),
+		)
 	}
 
-	prevHeader, err := bv.bc.getHeaderLocked(b.Height - 1)
+	prevHeader, err := bv.blockchain.getHeaderLocked(b.Height - 1)
 	if err != nil {
 		return err
 	}
