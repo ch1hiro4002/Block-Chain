@@ -132,7 +132,9 @@ func (s *Server) ProcessMessage(msg *DecodeMessage) error {
 
 func (s *Server) processTransaction(tx *core.Transaction) error {
 	hash := tx.Hash(core.TxHasher{})
+	
 	if s.memPool.Contains(hash) {
+		// Silently handle duplicate transactions
 		return nil
 	}
 
