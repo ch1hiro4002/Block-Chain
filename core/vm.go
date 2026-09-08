@@ -10,11 +10,14 @@ type Instruction byte
 
 const (
 	InstrPushInt  Instruction = 0x0a
-	InstrAdd      Instruction = 0x0b
-	InstrSub      Instruction = 0x0c
-	InstrPushByte Instruction = 0x0d
-	InstrPack     Instruction = 0x0e
-	InstrStore    Instruction = 0x0f
+	InstrPushByte Instruction = 0x0b
+	InstrAdd      Instruction = 0x0c
+	InstrSub      Instruction = 0x0d
+	InstrMul      Instruction = 0x0e
+	InstrDiv      Instruction = 0x0f
+	InstrPack     Instruction = 0x10
+	InstrStore    Instruction = 0x11
+	InstrGet      Instruction = 0x12
 )
 
 type Stack struct {
@@ -49,18 +52,18 @@ func (s *Stack) Pop() any {
 }
 
 type VM struct {
-	data          []byte
-	ip            int // instruction pointer
-	stack         *Stack
-	contractState *State
+	data  []byte
+	ip    int // instruction pointer
+	stack *Stack
+	state *State
 }
 
-func NewVM(data []byte, contractState *State) *VM {
+func NewVM(data []byte, state *State) *VM {
 	return &VM{
-		data:          data,
-		ip:            0,
-		stack:         NewStack(128),
-		contractState: contractState,
+		data:  data,
+		ip:    0,
+		stack: NewStack(128),
+		state: state,
 	}
 }
 
@@ -90,6 +93,20 @@ func (vm *VM) Exec(instr Instruction) error {
 		b := vm.stack.Pop().(int)
 		c := b - a
 		vm.stack.Push(c)
+	case InstrMul:
+		a := vm.stack.Pop().(int)
+		b := vm.stack.Pop().(int)
+		c := a * b
+		vm.stack.Push(c)
+	case InstrDiv:
+		a := vm.stack.Pop().(int)
+		if a == 0 {
+			return fmt.Errorf("division by zero")
+		}
+
+		b := vm.stack.Pop().(int)
+		c := b / a
+		vm.stack.Push(c)
 	case InstrPushByte:
 		vm.stack.Push(byte(vm.data[vm.ip-1]))
 	case InstrPack:
@@ -117,7 +134,15 @@ func (vm *VM) Exec(instr Instruction) error {
 			serializeValue = util.SerializeInt64(int64(value))
 		}
 
-		vm.contractState.Put(k, serializeValue)
+		vm.state.Put(k, serializeValue)
+	case InstrGet:
+		k := vm.stack.Pop().([]byte)
+
+		v, err := vm.state.Get(k)
+		if err != nil {
+			return err
+		}
+		vm.stack.Push(v)
 	}
 
 	return nil
