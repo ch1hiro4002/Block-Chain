@@ -1,16 +1,20 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ch1hiro4002/Block-Chain/util"
+)
 
 type Instruction byte
 
 const (
-	InstrPushInt  Instruction = 0x0a // 10
-	InstrAdd      Instruction = 0x0b // 11
-	InstrSub      Instruction = 0x0c // 12
-	InstrPushByte Instruction = 0x0d // 13
-	InstrPack     Instruction = 0x0e // 14
-
+	InstrPushInt  Instruction = 0x0a
+	InstrAdd      Instruction = 0x0b
+	InstrSub      Instruction = 0x0c
+	InstrPushByte Instruction = 0x0d
+	InstrPack     Instruction = 0x0e
+	InstrStore    Instruction = 0x0f
 )
 
 type Stack struct {
@@ -45,16 +49,18 @@ func (s *Stack) Pop() any {
 }
 
 type VM struct {
-	data  []byte
-	ip    int // instruction pointer
-	stack *Stack
+	data          []byte
+	ip            int // instruction pointer
+	stack         *Stack
+	contractState *State
 }
 
-func NewVM(data []byte) *VM {
+func NewVM(data []byte, contractState *State) *VM {
 	return &VM{
-		data:  data,
-		ip:    0,
-		stack: NewStack(128),
+		data:          data,
+		ip:            0,
+		stack:         NewStack(128),
+		contractState: contractState,
 	}
 }
 
@@ -101,6 +107,17 @@ func (vm *VM) Exec(instr Instruction) error {
 		}
 
 		vm.stack.Push(data)
+	case InstrStore:
+		k := vm.stack.Pop().([]byte)
+		v := vm.stack.Pop()
+		var serializeValue []byte
+
+		switch value := v.(type) {
+		case int:
+			serializeValue = util.SerializeInt64(int64(value))
+		}
+
+		vm.contractState.Put(k, serializeValue)
 	}
 
 	return nil

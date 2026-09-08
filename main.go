@@ -35,15 +35,15 @@ func main() {
 		}
 	}()
 
-	go func() {
-		time.Sleep(6 * time.Second)
+	// go func() {
+	// 	time.Sleep(6 * time.Second)
 
-		trLatest := network.NewLocalTransport("LATEST_REMOTE")
-		trRemoteC.Connect(trLatest)
+	// 	trLatest := network.NewLocalTransport("LATEST_REMOTE")
+	// 	trRemoteC.Connect(trLatest)
 
-		latestServer := makeServer("LATEST_REMOTE", nil, trLatest)
-		latestServer.Strat()
-	} ()
+	// 	latestServer := makeServer("LATEST_REMOTE", nil, trLatest)
+	// 	latestServer.Strat()
+	// } ()
 
 	privKey := crypto.GeneratePrivateKey()
 
@@ -78,7 +78,7 @@ func makeServer(id string, privKey *crypto.PrivateKey, tr network.Transport) *ne
 func createTxMessage() []byte {
 	privKey := crypto.GeneratePrivateKey()
 
-	data := []byte{0x20, 0x0a, 0x20, 0x0a, 0x0b}
+	data := []byte{0x03, 0x0a, 0x02, 0x0a, 0x0c, 0x46, 0x0d, 0x4f, 0x0d, 0x4f, 0x0d, 0x03, 0x0a, 0x0e, 0x0f}
 
 	tx := core.NewTransaction(data)
 	tx.Sign(privKey)

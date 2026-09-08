@@ -8,18 +8,20 @@ import (
 )
 
 type BlockChain struct {
-	Logger    log.Logger
-	store     Storage
-	headers   []*Header
-	validator Validator
-	lock      sync.RWMutex
+	logger        log.Logger
+	store         Storage
+	headers       []*Header
+	validator     Validator
+	lock          sync.RWMutex
+	contractState *State
 }
 
 func NewBlockChain(logger log.Logger) (*BlockChain, error) {
 	bc := &BlockChain{
-		Logger:  logger,
+		logger:  logger,
 		store:   NewMemoryStore(),
 		headers: []*Header{},
+		contractState: NewState(),
 	}
 	bc.validator = NewBlockValidator(bc)
 
@@ -48,18 +50,18 @@ func (bc *BlockChain) AddBlock(block *Block) error {
 	}
 
 	for _, tx := range block.Transactions {
-		bc.Logger.Log(
+		bc.logger.Log(
 			"msg", "executing code",
 			"code length", len(tx.Data),
 			"tx hash", tx.Hash(&TxHasher{}),
 		)
 
-		vm := NewVM(tx.Data)
+		vm := NewVM(tx.Data, bc.contractState)
 		if err := vm.Run(); err != nil {
 			return err
 		}
 
-		bc.Logger.Log("vm result:", vm.stack.data[vm.stack.sp])
+		fmt.Printf("STATE: %+v\n", vm.contractState)
 	}
 
 	return bc.addBlockWithoutValidation(block)
@@ -87,7 +89,7 @@ func (bc *BlockChain) addBlockWithoutValidation(b *Block) error {
 	bc.headers = append(bc.headers, b.Header)
 	hash := b.Hash(BlockHasher{})
 
-	bc.Logger.Log(
+	bc.logger.Log(
 		"msg", "Adding a new block to Blockchain",
 		"hash", hash,
 		"height", b.Height,
