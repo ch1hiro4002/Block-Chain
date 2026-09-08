@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
@@ -13,7 +14,7 @@ type Transaction struct {
 	From      crypto.PublicKey
 	Signature *crypto.Signature
 	hash      types.Hash
-	time      time.Time	// Time first seen locally
+	time      time.Time // Time first seen locally
 }
 
 func NewTransaction(data []byte) *Transaction {
@@ -36,6 +37,13 @@ func (tx *Transaction) Hash(hasher Hasher[*Transaction]) types.Hash {
 	}
 
 	return tx.hash
+}
+
+func (tx *Transaction) Bytes() []byte {
+	buf := &bytes.Buffer{}
+	tx.Encode(NewGobTxEncoder(buf))
+
+	return buf.Bytes()
 }
 
 func (tx *Transaction) Sign(privateKey crypto.PrivateKey) error {
