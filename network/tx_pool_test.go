@@ -38,6 +38,25 @@ func TestTxPoolAdd(t *testing.T) {
 	}
 }
 
+func TestTxPoolRemovePendingTransactions(t *testing.T) {
+	p := NewTxPool(10)
+
+	tx1 := testutil.NewRandomTransaction(100)
+	tx2 := testutil.NewRandomTransaction(100)
+
+	p.AddTransaction(tx1)
+	p.AddTransaction(tx2)
+
+	assert.Equal(t, 2, p.PendingCount())
+
+	p.RemovePendingTransactions([]*core.Transaction{tx1})
+
+	assert.Equal(t, 1, p.PendingCount())
+	assert.False(t, p.pending.Contains(tx1.Hash(core.TxHasher{})))
+	assert.True(t, p.pending.Contains(tx2.Hash(core.TxHasher{})))
+	assert.True(t, p.Contains(tx1.Hash(core.TxHasher{})))
+}
+
 func TestTxPoolMaxLength(t *testing.T) {
 	maxLen := 10
 	p := NewTxPool(maxLen)

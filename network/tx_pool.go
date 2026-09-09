@@ -37,6 +37,12 @@ func (tp *TxPool) ClearPending() {
 	tp.pending.Clear()
 }
 
+func (tp *TxPool) RemovePendingTransactions(txs []*core.Transaction) {
+	for _, tx := range txs {
+		tp.pending.Remove(tx.Hash(core.TxHasher{}))
+	}
+}
+
 func (tp *TxPool) Contains(hash types.Hash) bool {
 	return tp.all.Contains(hash)
 }
