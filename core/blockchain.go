@@ -61,7 +61,7 @@ func (bc *BlockChain) AddBlock(block *Block) error {
 			return err
 		}
 
-		fmt.Printf("STATE: %+v\n", vm.state)
+		fmt.Printf("contract_state: %+v\n", vm.state)
 	}
 
 	return bc.addBlockWithoutValidation(block)
@@ -122,7 +122,7 @@ func (bc *BlockChain) addBlockWithoutValidation(b *Block) error {
 	hash := b.Hash(BlockHasher{})
 
 	bc.logger.Log(
-		"msg", "Adding a new block to Blockchain",
+		"msg", "new block",
 		"hash", hash,
 		"height", b.Height,
 		"transactions", len(b.Transactions),
