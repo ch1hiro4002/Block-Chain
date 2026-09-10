@@ -2,6 +2,7 @@ package network
 
 import (
 	"bytes"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"net"
@@ -13,7 +14,7 @@ import (
 	"github.com/go-kit/log"
 )
 
-var defaultBlockTime = 5 * time.Second
+var defaultBlockTime = 2 * time.Second
 
 type ServerOpts struct {
 	ID            string
@@ -90,21 +91,23 @@ free:
 		select {
 		case peer := <-s.peerCh:
 			s.peerMap[NetAddr(peer.conn.RemoteAddr().String())] = peer
-
 			go peer.readLoop(s.rpcCh)
-			s.Logger.Log(
-				"msg", "accepted a new peer",
-				"from", peer.conn.RemoteAddr().String(),
-			)
+
+			if err := s.sendGetStatusMessage(peer); err != nil {
+				s.Logger.Log("err", err)
+				continue
+			}
 
 		case rpc := <-s.rpcCh:
 			msg, err := s.RPCDecodeFunc(rpc)
 			if err != nil {
 				s.Logger.Log("error", err)
+				continue
 			}
 
 			if err := s.ProcessMessage(msg); err != nil {
 				s.Logger.Log("error", err)
+				continue
 			}
 
 		case <-s.quitCh:
@@ -119,7 +122,7 @@ func (s *Server) bootstrapNetwork() {
 	for _, nodeAddr := range s.SeedNodes {
 		conn, err := net.Dial("tcp", nodeAddr)
 		if err != nil {
-			fmt.Printf("fai led to connect: %v",err)
+			fmt.Printf("failed to connect: %v",err)
 			continue
 		}
 
@@ -131,11 +134,6 @@ func (s *Server) bootstrapNetwork() {
 
 func (s *Server) validatorLoop() {
 	ticker := time.NewTicker(s.BlockTime)
-
-	s.Logger.Log(
-		"msg", "Starting server validator loop",
-		"blocktime", s.BlockTime,
-	)
 
 	for {
 		<-ticker.C
@@ -152,13 +150,13 @@ func (s *Server) ProcessMessage(msg *DecodeMessage) error {
 	case *core.Block:
 		return s.processBlock(t)
 	case *GetStatusMessage:
-		// return s.processGetStatusMessage(msg.From)
+		return s.processGetStatusMessage(msg.From)
 	case *StatusMessage:
-		// return s.processStatusMessage(msg.From, t)
+		return s.processStatusMessage(msg.From, t)
 	case *GetBlocksMessage:
-		// return s.processGetBlocksMessage(msg.From, t)
+		return s.processGetBlocksMessage(msg.From, t)
 	case *BlocksMessage:
-		// return s.processBlocksMessage(msg.From, t)
+		return s.processBlocksMessage(msg.From, t)
 	}
 
 	return nil
@@ -198,6 +196,7 @@ func (s *Server) broadcastTransaction(tx *core.Transaction) error {
 	}
 
 	msg := NewMessage(MessageTypeTx, buf.Bytes())
+
 	return s.broadcast(msg.Bytes())
 }
 
@@ -243,103 +242,133 @@ func (s *Server) broadcast(payload []byte) error {
 	return nil
 }
 
-// func (s *Server) sendGetStatusMessage(to Transport) error {
-// 	var (
-// 		getStatusMessage = new(GetStatusMessage)
-// 		buf              = new(bytes.Buffer)
-// 	)
+func (s *Server) sendGetStatusMessage(peer *TCPPeer) error {
+	var (
+		getStatusMessage = new(GetStatusMessage)
+		buf              = new(bytes.Buffer)
+	)
 
-// 	if err := gob.NewEncoder(buf).Encode(getStatusMessage); err != nil {
-// 		return nil
-// 	}
+	if err := gob.NewEncoder(buf).Encode(getStatusMessage); err != nil {
+		return nil
+	}
 
-// 	msg := NewMessage(MessageTypeGetStatus, buf.Bytes())
+	msg := NewMessage(MessageTypeGetStatus, buf.Bytes())
 
-// 	return s.Transport.SendMessage(to.Addr(), msg.Bytes())
-// }
+	return peer.Send(msg.Bytes())
+}
 
-// func (s *Server) processGetStatusMessage(from NetAddr) error {
-// 	s.Logger.Log(
-// 		"msg", "received request status msg",
-// 		"from", from,
-// 	)
+func (s *Server) processGetStatusMessage(from NetAddr) error {
+	s.Logger.Log(
+		"msg", "received request status msg",
+		"from", from,
+	)
 
-// 	statusMessage := &StatusMessage{
-// 		ID:            s.ID,
-// 		CurrentHeight: s.chain.Height(),
-// 	}
+	statusMessage := &StatusMessage{
+		ID:            s.ID,
+		CurrentHeight: s.chain.Height(),
+	}
 
-// 	buf := new(bytes.Buffer)
-// 	if err := gob.NewEncoder(buf).Encode(statusMessage); err != nil {
-// 		return err
-// 	}
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(statusMessage); err != nil {
+		return err
+	}
 
-// 	msg := NewMessage(MessageTypeStatus, buf.Bytes())
+	peer, ok := s.peerMap[from]
+	if !ok {
+		return fmt.Errorf("peer %s not known", peer.conn.RemoteAddr())
+	}
 
-// 	return s.Transport.SendMessage(from, msg.Bytes())
-// }
+	msg := NewMessage(MessageTypeStatus, buf.Bytes())
 
-// func (s *Server) processStatusMessage(from NetAddr, data *StatusMessage) error {
-// 	if data.CurrentHeight <= s.chain.Height() {
-// 		s.Logger.Log(
-// 			"msg", "cannot to sync block to low",
-// 			"height", s.chain.Height(),
-// 			"other height", data.CurrentHeight,
-// 		)
-// 		return nil
-// 	}
+	return peer.Send(msg.Bytes())
+}
 
-// 	getBlocksMessage := &GetBlocksMessage{
-// 		From: s.chain.Height() + 1,
-// 		To: 0,
-// 	}
+func (s *Server) processStatusMessage(from NetAddr, data *StatusMessage) error {
+	s.Logger.Log(
+		"msg", "received STATUS message", 
+		"from", from,
+	)
+	
+	if data.CurrentHeight <= s.chain.Height() {
+		s.Logger.Log(
+			"msg", "cannot to sync block to low",
+			"height", s.chain.Height(),
+			"other height", data.CurrentHeight,
+		)
+		return nil
+	}
 
-// 	buf := new(bytes.Buffer)
-// 	err := gob.NewEncoder(buf).Encode(getBlocksMessage)
-// 	if err != nil {
-// 		return err
-// 	}
+	getBlocksMessage := &GetBlocksMessage{
+		From: s.chain.Height() + 1,
+		To: 0,
+	}
 
-// 	msg :=	NewMessage(MessageTypeGetBlocks, buf.Bytes())
+	buf := new(bytes.Buffer)
+	err := gob.NewEncoder(buf).Encode(getBlocksMessage)
+	if err != nil {
+		return err
+	}
 
-// 	return s.Transport.SendMessage(from, msg.Bytes())
-// }
+	peer, ok := s.peerMap[from]
+	if !ok {
+		return fmt.Errorf("peer %s not known", peer.conn.RemoteAddr())
+	}
 
-// func (s *Server) processGetBlocksMessage(from NetAddr, data *GetBlocksMessage) error {
-// 	blocks, err := s.chain.GetBlocks(data.From, data.To)
-// 	if err != nil {
-// 		return err
-// 	}
+	msg :=	NewMessage(MessageTypeGetBlocks, buf.Bytes())
 
-// 	blocksMessage := &BlocksMessage{
-// 		Blocks: blocks,
-// 	}
+	return peer.Send(msg.Bytes())
+}
 
-// 	buf := new(bytes.Buffer)
-// 	if err := gob.NewEncoder(buf).Encode(blocksMessage); err != nil {
-// 		return err
-// 	}
+func (s *Server) processGetBlocksMessage(from NetAddr, data *GetBlocksMessage) error {
+	s.Logger.Log(
+		"msg", "received get blocks message", 
+		"from", from,
+	)
 
-// 	msg := NewMessage(MessageTypeBlocks, buf.Bytes())
+	blocks, err := s.chain.GetBlocks(data.From, data.To)
+	if err != nil {
+		return err
+	}
 
-// 	return s.Transport.SendMessage(from, msg.Bytes())
-// }
+	blocksMessage := &BlocksMessage{
+		Blocks: blocks,
+	}
 
-// func (s *Server) processBlocksMessage(from NetAddr, data *BlocksMessage) error {
-// 	for _, block := range data.Blocks {
-// 		if err := s.chain.AddBlock(block); err != nil {
-// 			if errors.Is(err, core.ErrBlockAlreadyExists) {
-// 				continue
-// 			}
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(blocksMessage); err != nil {
+		return err
+	}
 
-// 			return err
-// 		}
-// 	}
-// 	s.Logger.Log(
-// 		"msg", "successfully sync blocks",
-// 	)
-// 	return nil
-// }
+	peer, ok := s.peerMap[from]
+	if !ok {
+		return fmt.Errorf("peer %s not known", peer.conn.RemoteAddr())
+	}
+
+	msg := NewMessage(MessageTypeBlocks, buf.Bytes())
+
+	return peer.Send(msg.Bytes())
+}
+
+func (s *Server) processBlocksMessage(from NetAddr, data *BlocksMessage) error {
+	s.Logger.Log(
+		"msg", "received blocks message", 
+		"from", from,
+	)
+
+	for _, block := range data.Blocks {
+		if err := s.chain.AddBlock(block); err != nil {
+			if errors.Is(err, core.ErrBlockAlreadyExists) {
+				continue
+			}
+
+			return err
+		}
+	}
+	s.Logger.Log(
+		"msg", "successfully sync blocks",
+	)
+	return nil
+}
 
 
 

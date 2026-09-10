@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"net"
+	"time"
 
 	"github.com/ch1hiro4002/Block-Chain/core"
 	"github.com/ch1hiro4002/Block-Chain/crypto"
@@ -12,25 +12,14 @@ import (
 
 func main() {
 	privKey := crypto.GeneratePrivateKey()
-	localNode := makeServer("LOCAL", &privKey, ":3000", []string{"127.0.0.1:4000"})
+	localNode := makeServer("LOCAL", &privKey, ":3000", []string{})
 	go localNode.Strat()
 
+	time.Sleep(10 * time.Second)
 	remoeteNode := makeServer("Remote", nil, ":4000", []string{"127.0.0.1:3000"})
 	go remoeteNode.Strat()
 
 	select {}
-}
-
-func tcpTester() {
-	conn, err := net.Dial("tcp", "127.0.0.1:3000")
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = conn.Write(createTxMessage())
-	if err != nil {
-		panic(err)
-	}
 }
 
 func makeServer(id string, privKey *crypto.PrivateKey, listenAddr string, seedNodes []string) *network.Server {
