@@ -53,7 +53,7 @@ func (bc *BlockChain) AddBlock(block *Block) error {
 		bc.logger.Log(
 			"msg", "executing code",
 			"code length", len(tx.Data),
-			"tx hash", tx.hash,
+			"tx hash", tx.Hash(TxHasher{}),
 		)
 
 		vm := NewVM(tx.Data, bc.state)
@@ -83,6 +83,38 @@ func (bc *BlockChain) GetHeader(height uint32) (*Header, error) {
 	defer bc.lock.RUnlock()
 
 	return bc.getHeaderLocked(height)
+}
+
+func (bc *BlockChain) GetBlocks(from, to uint32) ([]*Block, error) {
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+
+	if from > to && to != 0 {
+		return nil, fmt.Errorf("invalid block range: from (%d) > to (%d)", from, to)
+	}
+
+	currentHeight := bc.heightLocked()
+
+	if from > currentHeight {
+		return []*Block{}, nil
+	}
+
+	if to > currentHeight || to == 0 {
+		to = currentHeight
+	}
+
+	blocks := make([]*Block, 0, to-from+1)
+
+	for height := from; height <= to; height++ {
+		block, err := bc.store.Get(height)
+		if err != nil {
+			return nil, err
+		}
+
+		blocks = append(blocks, block)
+	}
+
+	return blocks, nil
 }
 
 func (bc *BlockChain) addBlockWithoutValidation(b *Block) error {

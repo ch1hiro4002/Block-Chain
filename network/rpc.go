@@ -13,9 +13,12 @@ import (
 type MessageType byte
 
 const (
-	MessageTypeTx MessageType = 0x1
-	MessageTypeBlock MessageType = 0x2
-	MessageTypeGetBlocks MessageType = 0x3
+	MessageTypeTx        MessageType = 0x1
+	MessageTypeBlock     MessageType = 0x2
+	MessageTypeGetStatus MessageType = 0x3
+	MessageTypeStatus    MessageType = 0x4
+	MessageTypeGetBlocks MessageType = 0x5
+	MessageTypeBlocks    MessageType = 0x6
 )
 
 type RPC struct {
@@ -89,6 +92,45 @@ func DefaultRPCDecoeFunc(rpc RPC) (*DecodeMessage, error) {
 		return &DecodeMessage{
 			From: rpc.From,
 			Data: block,
+		}, nil
+
+	case MessageTypeGetStatus:
+		return &DecodeMessage{
+			From: rpc.From,
+			Data: &GetStatusMessage{},
+		}, nil
+
+	case MessageTypeStatus:
+		statusMessage := new(StatusMessage)
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(statusMessage); err != nil {
+			return nil, fmt.Errorf("failed to decode Status data: %v", err)
+		}
+
+		return &DecodeMessage{
+			From: rpc.From,
+			Data: statusMessage,
+		}, nil
+
+	case MessageTypeGetBlocks:
+		getBlocksMessage := new(GetBlocksMessage)
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(getBlocksMessage); err != nil {
+			return nil, fmt.Errorf("failed to decode Status data: %v", err)
+		}
+
+		return &DecodeMessage{
+			From: rpc.From,
+			Data: getBlocksMessage,
+		}, nil
+
+	case MessageTypeBlocks:
+		blocksMessage := new(BlocksMessage)
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(blocksMessage); err != nil {
+			return nil, fmt.Errorf("failed to decode Status data: %v", err)
+		}
+
+		return &DecodeMessage{
+			From: rpc.From,
+			Data: blocksMessage,
 		}, nil
 
 	default:

@@ -2,74 +2,62 @@ package main
 
 import (
 	"bytes"
-	"fmt"
-	"log"
 	"time"
 
 	"github.com/ch1hiro4002/Block-Chain/core"
 	"github.com/ch1hiro4002/Block-Chain/crypto"
 	"github.com/ch1hiro4002/Block-Chain/network"
+	"github.com/sirupsen/logrus"
 )
 
+var transports = []network.Transport{
+	network.NewLocalTransport("LOCAL"),
+	network.NewLocalTransport("REMOTE"),
+}
+
 func main() {
-	trLocal := network.NewLocalTransport("LOCAL")
-	trRemoteA := network.NewLocalTransport("REMOTE_A")
-	trRemoteB := network.NewLocalTransport("REMOTE_A")
-	trRemoteC := network.NewLocalTransport("REMOTE_A")
+	localNode := transports[0]
+	remoteNode := transports[1]
 
-	trLocal.Connect(trRemoteA)
-	trRemoteA.Connect(trRemoteB)
-	trRemoteB.Connect(trRemoteC)
+	privKey := crypto.GeneratePrivateKey()
+	localServer := makeServer("LOCAL", &privKey, transports[0])
 
-	trRemoteA.Connect(trLocal)
-
-	initRemoteServers([]network.Transport{trRemoteA, trRemoteB, trRemoteC})
+	go func() {
+		remoteServer := makeServer("REMOTE", nil, transports[1])
+		remoteServer.Strat()
+	}()
 
 	go func() {
 		for {
-			err := trRemoteA.SendMessage(trLocal.Addr(), createTxMessage())
+			err := sendTxMessage(localNode, remoteNode)
 			if err != nil {
-				log.Fatal(err)
+				logrus.Error(err)
 			}
 			time.Sleep(2 * time.Second)
 		}
 	}()
 
-	// go func() {
-	// 	time.Sleep(6 * time.Second)
+	go func() {
+		time.Sleep(10 * time.Second)
 
-	// 	trLatest := network.NewLocalTransport("LATEST_REMOTE")
-	// 	trRemoteC.Connect(trLatest)
-
-	// 	latestServer := makeServer("LATEST_REMOTE", nil, trLatest)
-	// 	latestServer.Strat()
-	// } ()
-
-	privKey := crypto.GeneratePrivateKey()
-
-	localServer := makeServer("LOCAL", &privKey, trLocal)
+		remoteServer := makeServer("LATEST_REMOTE", nil, network.NewLocalTransport("LATEST_REMOTE"))
+		remoteServer.Strat()
+	}()
 
 	localServer.Strat()
 }
 
-func initRemoteServers(trs []network.Transport) {
-	for i := 0; i < len(trs); i++ {
-		id := fmt.Sprintf("REMOTE_%d", i)
-		s := makeServer(id, nil, trs[i])
-		go s.Strat()
-	}
-}
-
-func makeServer(id string, privKey *crypto.PrivateKey, tr network.Transport) *network.Server {
+func makeServer(id string, privKey *crypto.PrivateKey, ts network.Transport) *network.Server {
 	opts := network.ServerOpts{
 		ID:         id,
 		PrivateKey: privKey,
-		Transports: []network.Transport{tr},
+		Transport:  ts,
+		Transports: transports,
 	}
 
 	s, err := network.NewServer(opts)
 	if err != nil {
-		log.Fatal(err)
+		logrus.Error(err)
 	}
 
 	return s
@@ -83,7 +71,7 @@ func contract() []byte {
 	return data
 }
 
-func createTxMessage() []byte {
+func sendTxMessage(from, to network.Transport) error {
 	privKey := crypto.GeneratePrivateKey()
 
 	tx := core.NewTransaction(contract())
@@ -91,10 +79,10 @@ func createTxMessage() []byte {
 
 	buf := &bytes.Buffer{}
 	if err := tx.Encode(core.NewGobTxEncoder(buf)); err != nil {
-		return nil
+		return err
 	}
 
 	msg := network.NewMessage(network.MessageTypeTx, buf.Bytes())
 
-	return msg.Bytes()
+	return from.SendMessage(to.Addr(), msg.Bytes())
 }

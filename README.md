@@ -2,7 +2,7 @@
 
 A small, educational blockchain node written in Go. The project is a learning-focused implementation of common blockchain concepts: signed transactions, a transaction mempool, block construction and validation, peer-to-peer-style message broadcasting, and a tiny stack-based virtual machine with in-memory key-value state.
 
-中文文档：[docs/README.zh-CN.md](docs/README.zh-CN.md)
+中文文档：[README.zh-CN.md](docs/README.zh-CN.md)
 
 > This project is not production-ready. It is intended for learning Go concurrency, interface design, and basic blockchain mechanics.
 

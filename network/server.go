@@ -2,6 +2,7 @@ package network
 
 import (
 	"bytes"
+	"encoding/gob"
 	"errors"
 	"os"
 	"time"
@@ -16,9 +17,10 @@ var defaultBlockTime = 5 * time.Second
 type ServerOpts struct {
 	ID            string
 	Logger        log.Logger
+	Transport     Transport
+	Transports    []Transport
 	RPCDecodeFunc RPCDecodeFunc
 	RPCProcessor  RPCProcessor
-	Transports    []Transport
 	BlockTime     time.Duration
 	PrivateKey    *crypto.PrivateKey
 }
@@ -63,11 +65,13 @@ func NewServer(opts ServerOpts) (*Server, error) {
 		server.RPCProcessor = server
 	}
 
+	server.boostrapNodes()
+
 	return server, nil
 }
 
 func (s *Server) Strat() {
-	s.initTransports()
+	s.initTransport()
 
 	if s.isValidator {
 		go s.validatorLoop()
@@ -93,14 +97,41 @@ free:
 	s.Logger.Log("msg", "Server shutdown!!!")
 }
 
-func (s *Server) initTransports() {
-	for _, tr := range s.Transports {
-		go func(tr Transport) {
-			for rpc := range tr.Consume() {
-				s.rpcCh <- rpc
+func (s *Server) initTransport() {
+	go func(ts Transport) {
+		for rpc := range ts.Consume() {
+			s.rpcCh <- rpc
+		}
+	}(s.Transport)
+}
+
+func (s *Server) boostrapNodes() {
+	for _, ts := range s.Transports {
+		if s.Transport.Addr() != ts.Addr() {
+			if err := s.Transport.Connect(ts); err != nil {
+				s.Logger.Log(
+					"error", "failed to connect to remote",
+				)
 			}
-		}(tr)
+
+			s.Logger.Log(
+				"msg", "connect to remote",
+				"from", s.Transport.Addr(),
+				"to", ts.Addr(),
+			)
+
+			if err := s.sendGetStatusMessage(ts); err != nil {
+				s.Logger.Log(
+					"error", "failed to send request status message",
+					"from", s.Transport.Addr(),
+					"to", ts.Addr(),
+				)
+			}
+		}
 	}
+	s.Logger.Log(
+		"msg", "Successfully bootstrapped nodes",
+	)
 }
 
 func (s *Server) validatorLoop() {
@@ -125,6 +156,14 @@ func (s *Server) ProcessMessage(msg *DecodeMessage) error {
 		return s.processTransaction(t)
 	case *core.Block:
 		return s.processBlock(t)
+	case *GetStatusMessage:
+		return s.processGetStatusMessage(msg.From)
+	case *StatusMessage:
+		return s.processStatusMessage(msg.From, t)
+	case *GetBlocksMessage:
+		return s.processGetBlocksMessage(msg.From, t)
+	case *BlocksMessage:
+		return	s.processBlocksMessage(msg.From, t)
 	}
 
 	return nil
@@ -132,7 +171,7 @@ func (s *Server) ProcessMessage(msg *DecodeMessage) error {
 
 func (s *Server) processTransaction(tx *core.Transaction) error {
 	hash := tx.Hash(core.TxHasher{})
-	
+
 	if s.memPool.Contains(hash) {
 		// Silently handle duplicate transactions
 		return nil
@@ -144,15 +183,15 @@ func (s *Server) processTransaction(tx *core.Transaction) error {
 
 	tx.SetTime(time.Now())
 
-	go s.broadcastTransaction(tx)
+	s.memPool.AddTransaction(tx)
 
 	s.Logger.Log(
 		"msg", "adding new tx to mempool",
 		"hash", hash,
 		"mempoolPengding", s.memPool.PendingCount(),
 	)
-
-	s.memPool.AddTransaction(tx)
+	
+	go s.broadcastTransaction(tx)
 
 	return nil
 }
@@ -177,6 +216,8 @@ func (s *Server) processBlock(block *core.Block) error {
 		return err
 	}
 
+	s.memPool.RemovePendingTransactions(block.Transactions)
+
 	go s.broadcastBlock(block)
 
 	return nil
@@ -195,12 +236,107 @@ func (s *Server) broadcastBlock(block *core.Block) error {
 }
 
 func (s *Server) broadcast(payload []byte) error {
-	for _, ts := range s.Transports {
-		if err := ts.Broadcast(payload); err != nil {
+	if err := s.Transport.Broadcast(payload); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Server) sendGetStatusMessage(to Transport) error {
+	var (
+		getStatusMessage = new(GetStatusMessage)
+		buf              = new(bytes.Buffer)
+	)
+
+	if err := gob.NewEncoder(buf).Encode(getStatusMessage); err != nil {
+		return nil
+	}
+
+	msg := NewMessage(MessageTypeGetStatus, buf.Bytes())
+
+	return s.Transport.SendMessage(to.Addr(), msg.Bytes())
+}
+
+func (s *Server) processGetStatusMessage(from NetAddr) error {
+	s.Logger.Log(
+		"msg", "received request status msg",
+		"from", from,
+	)
+
+	statusMessage := &StatusMessage{
+		ID:            s.ID,
+		CurrentHeight: s.chain.Height(),
+	}
+
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(statusMessage); err != nil {
+		return err
+	}
+
+	msg := NewMessage(MessageTypeStatus, buf.Bytes())
+
+	return s.Transport.SendMessage(from, msg.Bytes())
+}
+
+func (s *Server) processStatusMessage(from NetAddr, data *StatusMessage) error {
+	if data.CurrentHeight <= s.chain.Height() {
+		s.Logger.Log(
+			"msg", "cannot to sync block to low",
+			"height", s.chain.Height(),
+			"other height", data.CurrentHeight,
+		)
+		return nil
+	}
+
+	getBlocksMessage := &GetBlocksMessage{
+		From: s.chain.Height() + 1,
+		To: 0,
+	}
+
+	buf := new(bytes.Buffer)
+	err := gob.NewEncoder(buf).Encode(getBlocksMessage)
+	if err != nil {
+		return err
+	}
+
+	msg :=	NewMessage(MessageTypeGetBlocks, buf.Bytes())
+
+	return s.Transport.SendMessage(from, msg.Bytes())
+}
+
+func (s *Server) processGetBlocksMessage(from NetAddr, data *GetBlocksMessage) error {
+	blocks, err := s.chain.GetBlocks(data.From, data.To)
+	if err != nil {
+		return err
+	}
+
+	blocksMessage := &BlocksMessage{
+		Blocks: blocks,
+	}
+
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(blocksMessage); err != nil {
+		return err
+	}
+
+	msg := NewMessage(MessageTypeBlocks, buf.Bytes())
+
+	return s.Transport.SendMessage(from, msg.Bytes())
+}
+
+func (s *Server) processBlocksMessage(from NetAddr, data *BlocksMessage) error {
+	for _, block := range data.Blocks {
+		if err := s.chain.AddBlock(block); err != nil {
+			if errors.Is(err, core.ErrBlockAlreadyExists) {
+				continue
+			}
+
 			return err
 		}
 	}
-
+	s.Logger.Log(
+		"msg", "successfully sync blocks",
+	)
 	return nil
 }
 
