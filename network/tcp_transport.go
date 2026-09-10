@@ -2,39 +2,61 @@ package network
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 )
 
+const maxRPCFrameSize = 64 << 20 // 64MB
+
 type TCPPeer struct {
-	conn net.Conn
+	sendMu sync.Mutex
+	conn   net.Conn
 }
 
+// Send sends a length-prefixed message over the TCP connection.
 func (p *TCPPeer) Send(b []byte) error {
-	_, err := p.conn.Write(b)
+	p.sendMu.Lock()
+	defer p.sendMu.Unlock()
+
+	frame := make([]byte, 4+len(b))
+	binary.BigEndian.PutUint32(frame[:4], uint32(len(b)))
+	copy(frame[4:], b)
+	_, err := p.conn.Write(frame)
 	return err
 }
 
+// readLoop continuously reads and dispatches RPC messages from the connection.
 func (p *TCPPeer) readLoop(rpcCh chan RPC) {
-	buf := make([]byte, 4096)
-
 	for {
-		n, err := p.conn.Read(buf)
-		if err != nil {
+		header := make([]byte, 4)
+		if _, err := io.ReadFull(p.conn, header); err != nil {
 			fmt.Printf("read error: %v", err)
 			return
 		}
 
-		msg := buf[:n]
+		size := binary.BigEndian.Uint32(header)
+		if size == 0 || size > maxRPCFrameSize {
+			fmt.Printf("invalid rpc frame size: %d\n", size)
+			return
+		}
 
-		rpcCh<-RPC {
-			From: NetAddr(p.conn.RemoteAddr().String()),
-			Payload: bytes.NewReader(msg),
+		payload := make([]byte, size)
+
+		if _, err := io.ReadFull(p.conn, payload); err != nil {
+			fmt.Printf("read error: %v", err)
+			return
+		}
+
+		rpcCh <- RPC{
+			From:    NetAddr(p.conn.RemoteAddr().String()),
+			Payload: bytes.NewReader(payload),
 		}
 	}
-
 }
 
 type TCPTransport struct {

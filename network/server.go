@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/ch1hiro4002/Block-Chain/core"
@@ -30,6 +31,7 @@ type ServerOpts struct {
 
 type Server struct {
 	ServerOpts
+	peerMu      sync.RWMutex
 	peerMap     map[NetAddr]*TCPPeer
 	chain       *core.BlockChain
 	memPool     *TxPool
@@ -79,7 +81,7 @@ func NewServer(opts ServerOpts) (*Server, error) {
 
 func (s *Server) Strat() {
 	s.TCPTransport.Start()
-	
+
 	go s.bootstrapNetwork()
 
 	if s.isValidator {
@@ -90,7 +92,10 @@ free:
 	for {
 		select {
 		case peer := <-s.peerCh:
+			s.peerMu.Lock()
 			s.peerMap[NetAddr(peer.conn.RemoteAddr().String())] = peer
+			s.peerMu.Unlock()
+
 			go peer.readLoop(s.rpcCh)
 
 			if err := s.sendGetStatusMessage(peer); err != nil {
@@ -122,7 +127,7 @@ func (s *Server) bootstrapNetwork() {
 	for _, nodeAddr := range s.SeedNodes {
 		conn, err := net.Dial("tcp", nodeAddr)
 		if err != nil {
-			fmt.Printf("failed to connect: %v",err)
+			fmt.Printf("failed to connect: %v", err)
 			continue
 		}
 
@@ -230,12 +235,19 @@ func (s *Server) broadcastBlock(block *core.Block) error {
 }
 
 func (s *Server) broadcast(payload []byte) error {
-	for peerAddr, peer := range s.peerMap {
+	s.peerMu.RLock()
+	peers := make([]*TCPPeer, 0, len(s.peerMap))
+	for _, peer := range s.peerMap {
+		peers = append(peers, peer)
+	}
+	s.peerMu.RUnlock()
+
+	for _, peer := range peers {
 		if err := peer.Send(payload); err != nil {
 			s.Logger.Log(
 				"msg", "failed to send message",
-				"from", peer.conn.LocalAddr().String(),
-				"to", string(peerAddr),
+				"to", peer.conn.RemoteAddr().String(),
+				"err", err,
 			)
 		}
 	}
@@ -273,9 +285,11 @@ func (s *Server) processGetStatusMessage(from NetAddr) error {
 		return err
 	}
 
+	s.peerMu.RLock()
 	peer, ok := s.peerMap[from]
+	s.peerMu.RUnlock()
 	if !ok {
-		return fmt.Errorf("peer %s not known", peer.conn.RemoteAddr())
+		return fmt.Errorf("peer %s not known", from)
 	}
 
 	msg := NewMessage(MessageTypeStatus, buf.Bytes())
@@ -285,10 +299,10 @@ func (s *Server) processGetStatusMessage(from NetAddr) error {
 
 func (s *Server) processStatusMessage(from NetAddr, data *StatusMessage) error {
 	s.Logger.Log(
-		"msg", "received STATUS message", 
+		"msg", "received STATUS message",
 		"from", from,
 	)
-	
+
 	if data.CurrentHeight <= s.chain.Height() {
 		s.Logger.Log(
 			"msg", "cannot to sync block to low",
@@ -300,7 +314,7 @@ func (s *Server) processStatusMessage(from NetAddr, data *StatusMessage) error {
 
 	getBlocksMessage := &GetBlocksMessage{
 		From: s.chain.Height() + 1,
-		To: 0,
+		To:   0,
 	}
 
 	buf := new(bytes.Buffer)
@@ -309,19 +323,21 @@ func (s *Server) processStatusMessage(from NetAddr, data *StatusMessage) error {
 		return err
 	}
 
+	s.peerMu.RLock()
 	peer, ok := s.peerMap[from]
+	s.peerMu.RUnlock()
 	if !ok {
-		return fmt.Errorf("peer %s not known", peer.conn.RemoteAddr())
+		return fmt.Errorf("peer %s not known", from)
 	}
 
-	msg :=	NewMessage(MessageTypeGetBlocks, buf.Bytes())
+	msg := NewMessage(MessageTypeGetBlocks, buf.Bytes())
 
 	return peer.Send(msg.Bytes())
 }
 
 func (s *Server) processGetBlocksMessage(from NetAddr, data *GetBlocksMessage) error {
 	s.Logger.Log(
-		"msg", "received get blocks message", 
+		"msg", "received get blocks message",
 		"from", from,
 	)
 
@@ -339,9 +355,11 @@ func (s *Server) processGetBlocksMessage(from NetAddr, data *GetBlocksMessage) e
 		return err
 	}
 
+	s.peerMu.RLock()
 	peer, ok := s.peerMap[from]
+	s.peerMu.RUnlock()
 	if !ok {
-		return fmt.Errorf("peer %s not known", peer.conn.RemoteAddr())
+		return fmt.Errorf("peer %s not known", from)
 	}
 
 	msg := NewMessage(MessageTypeBlocks, buf.Bytes())
@@ -351,7 +369,7 @@ func (s *Server) processGetBlocksMessage(from NetAddr, data *GetBlocksMessage) e
 
 func (s *Server) processBlocksMessage(from NetAddr, data *BlocksMessage) error {
 	s.Logger.Log(
-		"msg", "received blocks message", 
+		"msg", "received blocks message",
 		"from", from,
 	)
 
@@ -369,8 +387,6 @@ func (s *Server) processBlocksMessage(from NetAddr, data *BlocksMessage) error {
 	)
 	return nil
 }
-
-
 
 func (s *Server) createNewBlock() error {
 	currentHeader, err := s.chain.GetHeader(s.chain.Height())
