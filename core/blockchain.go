@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ch1hiro4002/Block-Chain/types"
 	"github.com/go-kit/log"
 )
 
@@ -11,6 +12,7 @@ type BlockChain struct {
 	logger    log.Logger
 	store     Storage
 	headers   []*Header
+	hashes    map[types.Hash]uint32
 	validator Validator
 	lock      sync.RWMutex
 	state     *State
@@ -21,6 +23,7 @@ func NewBlockChain(logger log.Logger) (*BlockChain, error) {
 		logger:  logger,
 		store:   NewMemoryStore(),
 		headers: []*Header{},
+		hashes:  make(map[types.Hash]uint32),
 		state:   NewState(),
 	}
 	bc.validator = NewBlockValidator(bc)
@@ -34,10 +37,6 @@ func NewBlockChain(logger log.Logger) (*BlockChain, error) {
 	}
 
 	return bc, nil
-}
-
-func (bc *BlockChain) SetValidator(v Validator) {
-	bc.validator = v
 }
 
 func (bc *BlockChain) AddBlock(block *Block) error {
@@ -85,6 +84,29 @@ func (bc *BlockChain) GetHeader(height uint32) (*Header, error) {
 	return bc.getHeaderLocked(height)
 }
 
+func (bc *BlockChain) GetBlockWithHeight(height uint32) (*Block, error) {
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+
+	if height > bc.heightLocked() {
+		return nil, fmt.Errorf("given height (%d) too high", height)
+	}
+
+	return bc.store.Get(height)
+}
+
+func (bc *BlockChain) GetBlockWithHash(hash types.Hash) (*Block, error) {
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+
+	height, ok := bc.hashes[hash]
+	if !ok {
+		return nil, fmt.Errorf("block with hash (%s) not found", hash)
+	}
+
+	return bc.store.Get(height)
+}
+
 func (bc *BlockChain) GetBlocks(from, to uint32) ([]*Block, error) {
 	bc.lock.RLock()
 	defer bc.lock.RUnlock()
@@ -103,23 +125,13 @@ func (bc *BlockChain) GetBlocks(from, to uint32) ([]*Block, error) {
 		to = currentHeight
 	}
 
-	blocks := make([]*Block, 0, to-from+1)
-
-	for height := from; height <= to; height++ {
-		block, err := bc.store.Get(height)
-		if err != nil {
-			return nil, err
-		}
-
-		blocks = append(blocks, block)
-	}
-
-	return blocks, nil
+	return bc.store.GetRange(from, to)
 }
 
 func (bc *BlockChain) addBlockWithoutValidation(b *Block) error {
 	bc.headers = append(bc.headers, b.Header)
 	hash := b.Hash(BlockHasher{})
+	bc.hashes[hash] = b.Height
 
 	bc.logger.Log(
 		"msg", "new block",

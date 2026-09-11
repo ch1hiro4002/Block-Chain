@@ -11,8 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const maxRPCFrameSize = 64 << 20 // 64MB
-
 type TCPPeer struct {
 	sendMu sync.Mutex
 	conn   net.Conn
@@ -40,7 +38,7 @@ func (p *TCPPeer) readLoop(rpcCh chan RPC) {
 		}
 
 		size := binary.BigEndian.Uint32(header)
-		if size == 0 || size > maxRPCFrameSize {
+		if size == 0 {
 			fmt.Printf("invalid rpc frame size: %d\n", size)
 			return
 		}

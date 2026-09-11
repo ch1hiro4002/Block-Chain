@@ -23,14 +23,12 @@ const (
 type Stack struct {
 	data []any
 	sp   int
-	size int
 }
 
 func NewStack(size int) *Stack {
 	return &Stack{
 		data: make([]any, size),
 		sp:   0,
-		size: size,
 	}
 }
 

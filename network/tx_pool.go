@@ -47,6 +47,10 @@ func (tp *TxPool) Contains(hash types.Hash) bool {
 	return tp.all.Contains(hash)
 }
 
+func (tp *TxPool) Get(hash types.Hash) *core.Transaction {
+	return tp.all.Get(hash)
+}
+
 func (tp *TxPool) Pending() []*core.Transaction {
 	return tp.pending.txs.Data
 }

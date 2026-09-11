@@ -18,12 +18,23 @@ type PrivateKey struct {
 	key *ecdsa.PrivateKey
 }
 
-type PublicKey struct {
-	key *ecdsa.PublicKey
+func (k PrivateKey) PublicKey() PublicKey {
+	return PublicKey{
+		key: &k.key.PublicKey,
+	}
 }
 
-type Signature struct {
-	r, s *big.Int
+func (k PrivateKey) Sign(data []byte) (*Signature, error) {
+	r, s, err := ecdsa.Sign(rand.Reader, k.key, data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Signature{r: r, s: s}, nil
+}
+
+type PublicKey struct {
+	key *ecdsa.PublicKey
 }
 
 // Marshal serializes the public key into PKIX ASN.1 DER bytes.
@@ -53,13 +64,44 @@ func UnmarshalPublicKey(data []byte) (PublicKey, error) {
 	return PublicKey{key: ec}, nil
 }
 
+func (k PublicKey) GobEncode() ([]byte, error) {
+	return k.Marshal()
+}
+
+func (k *PublicKey) GobDecode(data []byte) error {
+	pub, err := UnmarshalPublicKey(data)
+	if err != nil {
+		return err
+	}
+
+	*k = pub
+	return nil
+}
+
+type Signature struct {
+	r, s *big.Int
+}
+
 type signatureWire struct {
 	R []byte
 	S []byte
 }
 
-// Marshal serializes the signature's r and s values into bytes.
-func (sig Signature) Marshal() ([]byte, error) {
+func (sig Signature) R() *big.Int {
+	if sig.r == nil {
+		return nil
+	}
+	return new(big.Int).Set(sig.r)
+}
+
+func (sig Signature) S() *big.Int {
+	if sig.s == nil {
+		return nil
+	}
+	return new(big.Int).Set(sig.s)
+}
+
+func (sig Signature) GobEncode() ([]byte, error) {
 	w := signatureWire{}
 	if sig.r != nil {
 		w.R = sig.r.Bytes()
@@ -76,17 +118,15 @@ func (sig Signature) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UnmarshalSignature parses bytes into a Signature.
-func UnmarshalSignature(data []byte) (Signature, error) {
+func (sig *Signature) GobDecode(data []byte) error {
 	var w signatureWire
 	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(&w); err != nil {
-		return Signature{}, err
+		return err
 	}
 
-	return Signature{
-		r: new(big.Int).SetBytes(w.R),
-		s: new(big.Int).SetBytes(w.S),
-	}, nil
+	sig.r = new(big.Int).SetBytes(w.R)
+	sig.s = new(big.Int).SetBytes(w.S)
+	return nil
 }
 
 func GeneratePrivateKey() PrivateKey {
@@ -100,13 +140,10 @@ func GeneratePrivateKey() PrivateKey {
 	}
 }
 
-func (k PrivateKey) PublicKey() PublicKey {
-	return PublicKey{
-		key: &k.key.PublicKey,
-	}
-}
-
 func (k PublicKey) ToSlice() []byte {
+	if k.key == nil {
+		return nil
+	}
 	bytes, err := k.key.Bytes()
 	if err != nil {
 		panic(err)
@@ -119,15 +156,6 @@ func (k PublicKey) Address() types.Address {
 	h := sha256.Sum256(k.ToSlice())
 
 	return types.AddressFromBytes(h[len(h)-20:])
-}
-
-func (k PrivateKey) Sign(data []byte) (*Signature, error) {
-	r, s, err := ecdsa.Sign(rand.Reader, k.key, data)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Signature{r, s}, nil
 }
 
 func (sig Signature) Verify(pubKey PublicKey, data []byte) bool {

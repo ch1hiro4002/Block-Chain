@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	github.com/go-kit/log v0.2.1
+	github.com/labstack/echo/v5 v5.3.1
 	github.com/sirupsen/logrus v1.10.2
 	github.com/stretchr/testify v1.12.1
 )

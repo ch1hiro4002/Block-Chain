@@ -49,10 +49,6 @@ func (msg *Message) Bytes() []byte {
 	return buf.Bytes()
 }
 
-type RPCProcessor interface {
-	ProcessMessage(*DecodeMessage) error
-}
-
 type RPCDecodeFunc func(RPC) (*DecodeMessage, error)
 
 type DecodeMessage struct {

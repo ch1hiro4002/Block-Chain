@@ -7,17 +7,13 @@ type State struct {
 }
 
 func NewState() *State {
-	return &State {
+	return &State{
 		data: make(map[string][]byte),
 	}
 }
 
 func (s *State) Put(k, v []byte) {
 	s.data[string(k)] = v
-}
-
-func (s *State) Delete(k []byte) {
-	delete(s.data, string(k))
 }
 
 func (s *State) Get(k []byte) ([]byte, error) {

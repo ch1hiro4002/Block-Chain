@@ -52,19 +52,6 @@ func (l *List[T]) Pop(index int) {
 	l.Data = append(l.Data[:index], l.Data[index+1:]...)
 }
 
-func (l *List[T]) Contains(v T) bool {
-	for i := 0; i < len(l.Data); i++ {
-		if reflect.DeepEqual(l.Data[i], v) {
-			return true
-		}
-	}
-	return false
-}
-
-func (l List[T]) Last() T {
-	return l.Data[l.Len()-1]
-}
-
 func (l *List[T]) Len() int {
 	return len(l.Data)
 }

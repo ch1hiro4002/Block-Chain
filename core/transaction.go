@@ -3,7 +3,6 @@ package core
 import (
 	"bytes"
 	"fmt"
-	"time"
 
 	"github.com/ch1hiro4002/Block-Chain/crypto"
 	"github.com/ch1hiro4002/Block-Chain/types"
@@ -14,21 +13,12 @@ type Transaction struct {
 	From      crypto.PublicKey
 	Signature *crypto.Signature
 	hash      types.Hash
-	time      time.Time // Time first seen locally
 }
 
 func NewTransaction(data []byte) *Transaction {
 	return &Transaction{
 		Data: data,
 	}
-}
-
-func (tx *Transaction) SetTime(t time.Time) {
-	tx.time = t
-}
-
-func (tx *Transaction) Time() time.Time {
-	return tx.time
 }
 
 func (tx *Transaction) Hash(hasher Hasher[*Transaction]) types.Hash {

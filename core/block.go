@@ -77,7 +77,7 @@ func (b *Block) Sign(privateKey crypto.PrivateKey) error {
 
 func (b *Block) Verify() error {
 	if b.Signature == nil {
-		return fmt.Errorf("this transaction has no signature")
+		return fmt.Errorf("block has no signature")
 	}
 
 	if !b.Signature.Verify(b.Validator, b.Header.Bytes()) {
@@ -92,7 +92,7 @@ func (b *Block) Verify() error {
 
 	txHash, err := CalculateDataHash(b.Transactions)
 	if err != nil {
-		return fmt.Errorf("falied to calculate datahash: %v", err)
+		return fmt.Errorf("failed to calculate datahash: %v", err)
 	}
 
 	if txHash != b.TxHash {

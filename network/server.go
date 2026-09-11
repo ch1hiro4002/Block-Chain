@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ch1hiro4002/Block-Chain/api"
 	"github.com/ch1hiro4002/Block-Chain/core"
 	"github.com/ch1hiro4002/Block-Chain/crypto"
 	"github.com/go-kit/log"
@@ -23,8 +24,8 @@ type ServerOpts struct {
 	TCPTransport  *TCPTransport
 	SeedNodes     []string
 	ListenAddr    string
+	APIListenAddr string
 	RPCDecodeFunc RPCDecodeFunc
-	RPCProcessor  RPCProcessor
 	BlockTime     time.Duration
 	PrivateKey    *crypto.PrivateKey
 }
@@ -59,22 +60,35 @@ func NewServer(opts ServerOpts) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	memPool := NewTxPool(100)
+
+	// Config API services
+	if len(opts.APIListenAddr) > 0 {
+		apiServerConfig := api.ServerConfig{
+			Logger:     opts.Logger,
+			ListenAddr: opts.APIListenAddr,
+		}
+
+		apiServer := api.NewServer(apiServerConfig, blockchain, memPool)
+		go apiServer.Start()
+
+		apiServer.Logger.Log(
+			"msg", "JSON API server running",
+			"port", apiServer.ListenAddr,
+		)
+	}
+
 	server := &Server{
 		ServerOpts:  opts,
 		peerMap:     make(map[NetAddr]*TCPPeer),
 		chain:       blockchain,
-		memPool:     NewTxPool(100),
+		memPool:     memPool,
 		isValidator: opts.PrivateKey != nil,
 		rpcCh:       make(chan RPC),
 		quitCh:      make(chan struct{}, 1),
 		peerCh:      opts.TCPTransport.peerCh,
 	}
-
-	if server.RPCProcessor == nil {
-		server.RPCProcessor = server
-	}
-
-	// server.boostrapNodes()
 
 	return server, nil
 }
@@ -178,8 +192,6 @@ func (s *Server) processTransaction(tx *core.Transaction) error {
 	if err := tx.Verify(); err != nil {
 		return err
 	}
-
-	tx.SetTime(time.Now())
 
 	s.memPool.AddTransaction(tx)
 

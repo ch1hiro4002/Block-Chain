@@ -13,11 +13,8 @@ func TestStack_Push_Pop(t *testing.T) {
 	stack.Push(1)
 	stack.Push(2)
 
-	// fmt.Println(stack)
-
 	value := stack.Pop()
 	assert.Equal(t, value.(int), 2)
-	// fmt.Println(stack)
 }
 
 func TestVM_Int_Add(t *testing.T) {

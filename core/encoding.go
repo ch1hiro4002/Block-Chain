@@ -23,15 +23,15 @@ type blockHeaderWire struct {
 
 type blockTransactionWire struct {
 	Data      []byte
-	From      []byte
-	Signature []byte
+	From      crypto.PublicKey
+	Signature *crypto.Signature
 }
 
 type blockWire struct {
 	Header       blockHeaderWire
 	Transactions []blockTransactionWire
-	Validator    []byte
-	Signature    []byte
+	Validator    crypto.PublicKey
+	Signature    *crypto.Signature
 }
 
 type GobBlockEncoder struct {
@@ -63,17 +63,10 @@ func (e *GobBlockEncoder) Encode(block *Block) error {
 		Transactions: make([]blockTransactionWire, 0, len(block.Transactions)),
 	}
 
-	validator, err := block.Validator.Marshal()
-	if err != nil {
-		return fmt.Errorf("failed to marshal block validator: %w", err)
-	}
-	wire.Validator = validator
+	wire.Validator = block.Validator
 
 	if block.Signature != nil {
-		wire.Signature, err = block.Signature.Marshal()
-		if err != nil {
-			return fmt.Errorf("failed to marshal block signature: %w", err)
-		}
+		wire.Signature = block.Signature
 	}
 
 	for _, tx := range block.Transactions {
@@ -81,23 +74,10 @@ func (e *GobBlockEncoder) Encode(block *Block) error {
 			return fmt.Errorf("cannot encode block with nil transaction")
 		}
 
-		from, err := tx.From.Marshal()
-		if err != nil {
-			return fmt.Errorf("failed to marshal transaction sender: %w", err)
-		}
-
-		var sig []byte
-		if tx.Signature != nil {
-			sig, err = tx.Signature.Marshal()
-			if err != nil {
-				return fmt.Errorf("failed to marshal transaction signature: %w", err)
-			}
-		}
-
 		wire.Transactions = append(wire.Transactions, blockTransactionWire{
 			Data:      tx.Data,
-			From:      from,
-			Signature: sig,
+			From:      tx.From,
+			Signature: tx.Signature,
 		})
 	}
 
@@ -124,11 +104,6 @@ func (e *GobBlockDecoder) Decode(block *Block) error {
 		return err
 	}
 
-	validator, err := crypto.UnmarshalPublicKey(wire.Validator)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal block validator: %w", err)
-	}
-
 	block.Header = &Header{
 		Version:       wire.Header.Version,
 		TxHash:        wire.Header.TxHash,
@@ -136,37 +111,18 @@ func (e *GobBlockDecoder) Decode(block *Block) error {
 		Timestamp:     wire.Header.Timestamp,
 		Height:        wire.Header.Height,
 	}
-	block.Validator = validator
+	block.Validator = wire.Validator
 
-	if len(wire.Signature) > 0 {
-		sig, err := crypto.UnmarshalSignature(wire.Signature)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal block signature: %w", err)
-		}
-		block.Signature = &sig
-	} else {
-		block.Signature = nil
-	}
+	block.Signature = wire.Signature
 
 	block.Transactions = make([]*Transaction, 0, len(wire.Transactions))
 	for _, txWire := range wire.Transactions {
-		from, err := crypto.UnmarshalPublicKey(txWire.From)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal transaction sender: %w", err)
-		}
-
 		tx := &Transaction{
 			Data: txWire.Data,
-			From: from,
+			From: txWire.From,
 		}
 
-		if len(txWire.Signature) > 0 {
-			sig, err := crypto.UnmarshalSignature(txWire.Signature)
-			if err != nil {
-				return fmt.Errorf("failed to unmarshal transaction signature: %w", err)
-			}
-			tx.Signature = &sig
-		}
+		tx.Signature = txWire.Signature
 
 		block.Transactions = append(block.Transactions, tx)
 	}
@@ -185,27 +141,14 @@ func NewGobTxEncoder(w io.Writer) *GobTxEncoder {
 }
 
 func (e *GobTxEncoder) Encode(tx *Transaction) error {
-	from, err := tx.From.Marshal()
-	if err != nil {
-		return err
-	}
-
-	var sig []byte
-	if tx.Signature != nil {
-		sig, err = tx.Signature.Marshal()
-		if err != nil {
-			return err
-		}
-	}
-
 	w := struct {
 		Data      []byte
-		From      []byte
-		Signature []byte
+		From      crypto.PublicKey
+		Signature *crypto.Signature
 	}{
 		Data:      tx.Data,
-		From:      from,
-		Signature: sig,
+		From:      tx.From,
+		Signature: tx.Signature,
 	}
 
 	return gob.NewEncoder(e.w).Encode(w)
@@ -228,29 +171,18 @@ func NewGobTxDecoder(r io.Reader) *GobTxDecoder {
 func (d *GobTxDecoder) Decode(tx *Transaction) error {
 	w := struct {
 		Data      []byte
-		From      []byte
-		Signature []byte
+		From      crypto.PublicKey
+		Signature *crypto.Signature
 	}{}
 
 	if err := gob.NewDecoder(d.r).Decode(&w); err != nil {
 		return err
 	}
 
-	from, err := crypto.UnmarshalPublicKey(w.From)
-	if err != nil {
-		return err
-	}
-
 	tx.Data = w.Data
-	tx.From = from
+	tx.From = w.From
 
-	if len(w.Signature) > 0 {
-		sig, err := crypto.UnmarshalSignature(w.Signature)
-		if err != nil {
-			return err
-		}
-		tx.Signature = &sig
-	}
+	tx.Signature = w.Signature
 
 	return nil
 }
