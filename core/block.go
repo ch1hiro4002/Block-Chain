@@ -17,6 +17,7 @@ type Header struct {
 	PrevBlockHash types.Hash
 	Timestamp     int64
 	Height        uint32
+	Proposer      types.Address
 }
 
 type Block struct {
@@ -75,13 +76,22 @@ func (b *Block) Sign(privateKey crypto.PrivateKey) error {
 	return nil
 }
 
-func (b *Block) Verify() error {
+func (b *Block) Verify(prevHeader *Header) error {
 	if b.Signature == nil {
 		return fmt.Errorf("block has no signature")
 	}
 
 	if !b.Signature.Verify(b.Validator, b.Header.Bytes()) {
 		return fmt.Errorf("invalid signature")
+	}
+
+	if b.Header.Proposer != b.Validator.Address() {
+		return fmt.Errorf("block proposer does not match block validator")
+	}
+
+	hash := BlockHasher{}.Hash(prevHeader)
+	if hash != b.PrevBlockHash {
+		return fmt.Errorf("block(%d) has invalid previous block hash", b.Height)
 	}
 
 	for _, tx := range b.Transactions {

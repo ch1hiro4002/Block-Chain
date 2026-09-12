@@ -72,27 +72,25 @@ func (s *Server) HandleGetTransaction(context *echo.Context) error {
 	return context.JSON(http.StatusOK, response)
 }
 
-// HandleGetBlock handles GET /block/:blockID by returning the block identified by
-// a numeric height or a 64-character hex block hash.
 func (s *Server) HandleGetBlock(context *echo.Context) error {
-	blockID := context.Param("blockIDorHash")
+	blockIDorHash := context.Param("blockIDorHash")
 
-	if len(blockID) == 64 {
-		hashBytes, err := hex.DecodeString(blockID)
+	if len(blockIDorHash) == 64 {
+		hashBytes, err := hex.DecodeString(blockIDorHash)
 		if err == nil {
 			block, err := s.blockchain.GetBlockWithHash(types.HashFromBytes(hashBytes))
 			if err != nil {
-				logrus.Errorf("failed to get block with hash %s: %v", blockID, err)
+				logrus.Errorf("failed to get block with hash %s: %v", blockIDorHash, err)
 				return context.JSON(http.StatusNotFound, map[string]any{"error": err.Error()})
 			}
 
-			return s.writeBlockResponse(context, blockID, block)
+			return s.writeBlockResponse(context, blockIDorHash, block)
 		}
 	}
 
-	height, err := strconv.Atoi(blockID)
+	height, err := strconv.Atoi(blockIDorHash)
 	if err != nil || height < 0 {
-		logrus.Errorf("invalid block ID %q: %v", blockID, err)
+		logrus.Errorf("invalid block ID %q: %v", blockIDorHash, err)
 		return context.JSON(http.StatusBadRequest, map[string]any{"error": "invalid block ID"})
 	}
 
@@ -102,7 +100,7 @@ func (s *Server) HandleGetBlock(context *echo.Context) error {
 		return context.JSON(http.StatusNotFound, map[string]any{"error": err.Error()})
 	}
 
-	return s.writeBlockResponse(context, blockID, block)
+	return s.writeBlockResponse(context, blockIDorHash, block)
 }
 
 func (s *Server) writeBlockResponse(context *echo.Context, blockID string, block *core.Block) error {

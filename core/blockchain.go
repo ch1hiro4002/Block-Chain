@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ch1hiro4002/Block-Chain/crypto"
 	"github.com/ch1hiro4002/Block-Chain/types"
 	"github.com/go-kit/log"
 )
@@ -14,26 +15,32 @@ const (
 )
 
 type BlockChain struct {
-	logger        log.Logger
-	store         Storage
-	headers       []*Header
-	hashes        map[types.Hash]uint32
-	validator     Validator
-	lock          sync.RWMutex
-	state         *State
-	accountNonces map[types.Address]uint64
+	logger              log.Logger
+	store               Storage
+	headers             []*Header
+	hashes              map[types.Hash]uint32
+	validator           Validator
+	lock                sync.RWMutex
+	state               *State
+	accountNonces       map[types.Address]uint64
+	validatorSet        *ValidatorSet
+	validatorSetHistory map[uint32]*ValidatorSet
 }
 
-func NewBlockChain(logger log.Logger) (*BlockChain, error) {
+func NewBlockChain(logger log.Logger, addr types.Address, pubKey crypto.PublicKey, stake uint64) (*BlockChain, error) {
 	bc := &BlockChain{
-		logger:        logger,
-		store:         NewMemoryStore(),
-		headers:       []*Header{},
-		hashes:        make(map[types.Hash]uint32),
-		state:         NewState(),
-		accountNonces: make(map[types.Address]uint64),
+		logger:              logger,
+		store:               NewMemoryStore(),
+		headers:             []*Header{},
+		hashes:              make(map[types.Hash]uint32),
+		state:               NewState(),
+		accountNonces:       make(map[types.Address]uint64),
+		validatorSetHistory: make(map[uint32]*ValidatorSet),
 	}
-	bc.validator = NewBlockValidator(bc)
+	bv := NewBlockValidator(addr, pubKey, stake, bc)
+	bc.validator = bv
+	bc.validatorSet = NewValidatorSet()
+	bc.validatorSet.Add(*bv)
 
 	genesis, err := newGenesisBlock()
 	if err != nil {
@@ -146,6 +153,60 @@ func (bc *BlockChain) GetBlocks(from, to uint32) ([]*Block, error) {
 	return bc.store.GetRange(from, to)
 }
 
+func (bc *BlockChain) GetValidatorSet() *ValidatorSet {
+	return bc.validatorSet
+}
+
+func (bc *BlockChain) GetValidatorSetForHeight(height uint32) *ValidatorSet {
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+
+	return bc.validatorSetForHeightLocked(height)
+}
+
+func (bc *BlockChain) validatorSetForHeightLocked(height uint32) *ValidatorSet {
+	if validatorSet, ok := bc.validatorSetHistory[height]; ok {
+		return validatorSet
+	}
+
+	return bc.validatorSet
+}
+
+func (bc *BlockChain) GetValidatorSetHistory() map[uint32][]ValidatorInfo {
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+
+	history := make(map[uint32][]ValidatorInfo, len(bc.validatorSetHistory))
+	for height, validatorSet := range bc.validatorSetHistory {
+		history[height] = validatorSet.Snapshot()
+	}
+
+	return history
+}
+
+func (bc *BlockChain) SetValidatorSetHistory(history map[uint32][]ValidatorInfo) error {
+	pending := make(map[uint32]*ValidatorSet, len(history))
+	for height, infos := range history {
+		validatorSet := NewValidatorSet()
+		if err := validatorSet.Merge(infos); err != nil {
+			return err
+		}
+		pending[height] = validatorSet
+	}
+
+	bc.lock.Lock()
+	defer bc.lock.Unlock()
+
+	for height, validatorSet := range pending {
+		if _, ok := bc.validatorSetHistory[height]; ok {
+			continue
+		}
+		bc.validatorSetHistory[height] = validatorSet
+	}
+
+	return nil
+}
+
 func (bc *BlockChain) addBlockWithoutValidation(b *Block) error {
 	bc.headers = append(bc.headers, b.Header)
 	hash := b.Hash(BlockHasher{})
@@ -156,10 +217,24 @@ func (bc *BlockChain) addBlockWithoutValidation(b *Block) error {
 		"hash", hash,
 		"height", b.Height,
 		"transactions", len(b.Transactions),
+		"proposer", b.Proposer,
 	)
 
-	err := bc.store.Put(b)
-	return err
+	if err := bc.store.Put(b); err != nil {
+		return err
+	}
+
+	bc.recordValidatorSetLocked(b.Height)
+
+	return nil
+}
+
+func (bc *BlockChain) recordValidatorSetLocked(height uint32) {
+	if _, ok := bc.validatorSetHistory[height]; ok {
+		return
+	}
+
+	bc.validatorSetHistory[height] = bc.validatorSet.Clone()
 }
 
 func (bc *BlockChain) heightLocked() uint32 {

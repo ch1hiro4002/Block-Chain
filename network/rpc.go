@@ -13,12 +13,14 @@ import (
 type MessageType byte
 
 const (
-	MessageTypeTx        MessageType = 0x1
-	MessageTypeBlock     MessageType = 0x2
-	MessageTypeGetStatus MessageType = 0x3
-	MessageTypeStatus    MessageType = 0x4
-	MessageTypeGetBlocks MessageType = 0x5
-	MessageTypeBlocks    MessageType = 0x6
+	MessageTypeTx            MessageType = 0x1
+	MessageTypeBlock         MessageType = 0x2
+	MessageTypeGetStatus     MessageType = 0x3
+	MessageTypeStatus        MessageType = 0x4
+	MessageTypeGetBlocks     MessageType = 0x5
+	MessageTypeBlocks        MessageType = 0x6
+	MessageTypeGetValidators MessageType = 0x7
+	MessageTypeValidators    MessageType = 0x8
 )
 
 type RPC struct {
@@ -127,6 +129,28 @@ func DefaultRPCDecoeFunc(rpc RPC) (*DecodeMessage, error) {
 		return &DecodeMessage{
 			From: rpc.From,
 			Data: blocksMessage,
+		}, nil
+
+	case MessageTypeGetValidators:
+		getValidatorsMessage := new(GetValidatorsMessage)
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(getValidatorsMessage); err != nil {
+			return nil, fmt.Errorf("failed to decode GetValidators data: %v", err)
+		}
+
+		return &DecodeMessage{
+			From: rpc.From,
+			Data: getValidatorsMessage,
+		}, nil
+
+	case MessageTypeValidators:
+		validatorsMessage := new(ValidatorsMessage)
+		if err := gob.NewDecoder(bytes.NewReader(msg.Data)).Decode(validatorsMessage); err != nil {
+			return nil, fmt.Errorf("failed to decode Validators data: %v", err)
+		}
+
+		return &DecodeMessage{
+			From: rpc.From,
+			Data: validatorsMessage,
 		}, nil
 
 	default:

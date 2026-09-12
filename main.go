@@ -13,21 +13,24 @@ import (
 )
 
 func main() {
-	privKey := crypto.GeneratePrivateKey()
-	localNode := makeServer("LOCAL", &privKey, []string{}, ":3000", ":8888")
+	privKey_1 := crypto.GeneratePrivateKey()
+	localNode := makeServer("LOCAL", &privKey_1, []string{}, ":3000", ":9999", 100)
 	go localNode.Strat()
 
-	// remoteNode := makeServer("REMOTE", nil, []string{"127.0.0.1:3000"}, ":4000", ":9999")
-	// go remoteNode.Strat()
+	privKey_2 := crypto.GeneratePrivateKey()
+	remoteNode := makeServer("REMOTE", &privKey_2, []string{"127.0.0.1:3000"}, ":4000", ":9998", 1000)
+	go remoteNode.Strat()
 
-	time.Sleep(2 * time.Second)
-	txSender()
-	txSender()
+	time.Sleep(10 * time.Second)
 
-	select {}
+	privKey_3 := crypto.GeneratePrivateKey()
+	lateNode := makeServer("LATE", &privKey_3, []string{"127.0.0.1:3000", "127.0.0.1:4000"}, ":5000", ":9997", 10000)
+	go lateNode.Strat()
+
+	select{}
 }
 
-func makeServer(id string, privKey *crypto.PrivateKey, seedNodes []string, listenAddr string, apiListenAddr string) *network.Server {
+func makeServer(id string, privKey *crypto.PrivateKey, seedNodes []string, listenAddr string, apiListenAddr string, stake uint64) *network.Server {
 	opts := network.ServerOpts{
 		ID:            id,
 		PrivateKey:    privKey,
@@ -37,7 +40,10 @@ func makeServer(id string, privKey *crypto.PrivateKey, seedNodes []string, liste
 		APIListenAddr: apiListenAddr,
 	}
 
-	s, err := network.NewServer(opts)
+	pubKey := privKey.PublicKey()
+	addr := pubKey.Address()
+
+	s, err := network.NewServer(opts, addr, pubKey, stake)
 	if err != nil {
 		logrus.Error(err)
 	}

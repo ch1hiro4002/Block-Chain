@@ -13,6 +13,7 @@ import (
 	"github.com/ch1hiro4002/Block-Chain/api"
 	"github.com/ch1hiro4002/Block-Chain/core"
 	"github.com/ch1hiro4002/Block-Chain/crypto"
+	"github.com/ch1hiro4002/Block-Chain/types"
 	"github.com/go-kit/log"
 )
 
@@ -34,6 +35,9 @@ type Server struct {
 	ServerOpts
 	peerMu      sync.RWMutex
 	peerMap     map[NetAddr]*TCPPeer
+	syncMu      sync.RWMutex
+	syncTarget  uint32
+	synced      bool
 	chain       *core.BlockChain
 	memPool     *TxPool
 	isValidator bool
@@ -42,7 +46,7 @@ type Server struct {
 	peerCh      chan *TCPPeer
 }
 
-func NewServer(opts ServerOpts) (*Server, error) {
+func NewServer(opts ServerOpts, addr types.Address, pubKey crypto.PublicKey, stake uint64) (*Server, error) {
 	if opts.BlockTime == time.Duration(0) {
 		opts.BlockTime = defaultBlockTime
 	}
@@ -56,7 +60,7 @@ func NewServer(opts ServerOpts) (*Server, error) {
 		opts.Logger = log.With(opts.Logger, "ID", opts.ID)
 	}
 
-	blockchain, err := core.NewBlockChain(opts.Logger)
+	blockchain, err := core.NewBlockChain(opts.Logger, addr, pubKey, stake)
 	if err != nil {
 		return nil, err
 	}
@@ -85,12 +89,48 @@ func NewServer(opts ServerOpts) (*Server, error) {
 		chain:       blockchain,
 		memPool:     memPool,
 		isValidator: opts.PrivateKey != nil,
+		synced:      len(opts.SeedNodes) == 0,
 		rpcCh:       make(chan RPC),
 		quitCh:      make(chan struct{}, 1),
 		peerCh:      opts.TCPTransport.peerCh,
 	}
 
 	return server, nil
+}
+
+func (s *Server) isSynced() bool {
+	s.syncMu.RLock()
+	defer s.syncMu.RUnlock()
+
+	return s.synced
+}
+
+func (s *Server) markSynced() {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+
+	s.synced = true
+	s.syncTarget = 0
+}
+
+func (s *Server) setSyncTarget(height uint32) {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+
+	s.synced = false
+	if height > s.syncTarget {
+		s.syncTarget = height
+	}
+}
+
+func (s *Server) markSyncProgressDone() {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+
+	if s.syncTarget == 0 || s.chain.Height() >= s.syncTarget {
+		s.synced = true
+		s.syncTarget = 0
+	}
 }
 
 func (s *Server) Strat() {
@@ -111,6 +151,11 @@ free:
 			s.peerMu.Unlock()
 
 			go peer.readLoop(s.rpcCh)
+
+			if err := s.sendGetValidatorsMessage(peer); err != nil {
+				s.Logger.Log("err", err)
+				continue
+			}
 
 			if err := s.sendGetStatusMessage(peer); err != nil {
 				s.Logger.Log("err", err)
@@ -156,6 +201,15 @@ func (s *Server) validatorLoop() {
 
 	for {
 		<-ticker.C
+
+		if !s.isSynced() {
+			continue
+		}
+
+		if !s.shouldPropose() {
+			continue
+		}
+
 		if err := s.createNewBlock(); err != nil {
 			s.Logger.Log("msg", "failed to create new block", "err", err)
 		}
@@ -176,6 +230,10 @@ func (s *Server) ProcessMessage(msg *DecodeMessage) error {
 		return s.processGetBlocksMessage(msg.From, t)
 	case *BlocksMessage:
 		return s.processBlocksMessage(msg.From, t)
+	case *GetValidatorsMessage:
+		return s.processGetValidatorsMessage(msg.From)
+	case *ValidatorsMessage:
+		return s.processValidatorsMessage(msg.From, t)
 	}
 
 	return nil
@@ -270,6 +328,66 @@ func (s *Server) broadcast(payload []byte) error {
 	return nil
 }
 
+func (s *Server) sendGetValidatorsMessage(peer *TCPPeer) error {
+	getValidatorsMessage := new(GetValidatorsMessage)
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(getValidatorsMessage); err != nil {
+		return err
+	}
+
+	msg := NewMessage(MessageTypeGetValidators, buf.Bytes())
+
+	return peer.Send(msg.Bytes())
+}
+
+func (s *Server) processGetValidatorsMessage(from NetAddr) error {
+	validators := s.chain.GetValidatorSet().Snapshot()
+	validatorsMessage := &ValidatorsMessage{
+		Height:     s.chain.Height(),
+		Validators: validators,
+		History:    s.chain.GetValidatorSetHistory(),
+	}
+
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(validatorsMessage); err != nil {
+		return err
+	}
+
+	s.peerMu.RLock()
+	peer, ok := s.peerMap[from]
+	s.peerMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("peer %s not known", from)
+	}
+
+	msg := NewMessage(MessageTypeValidators, buf.Bytes())
+
+	return peer.Send(msg.Bytes())
+}
+
+func (s *Server) processValidatorsMessage(from NetAddr, data *ValidatorsMessage) error {
+	if data == nil {
+		return fmt.Errorf("received nil validators message")
+	}
+
+	if err := s.chain.SetValidatorSetHistory(data.History); err != nil {
+		return fmt.Errorf("failed to import validator history from %s: %w", from, err)
+	}
+
+	if err := s.chain.GetValidatorSet().Merge(data.Validators); err != nil {
+		return fmt.Errorf("failed to merge validators from %s: %w", from, err)
+	}
+
+	s.Logger.Log(
+		"msg", "validators updated",
+		"from", from,
+		"height", data.Height,
+		"validators", len(data.Validators),
+	)
+
+	return nil
+}
+
 func (s *Server) sendGetStatusMessage(peer *TCPPeer) error {
 	var (
 		getStatusMessage = new(GetStatusMessage)
@@ -325,8 +443,11 @@ func (s *Server) processStatusMessage(from NetAddr, data *StatusMessage) error {
 			"height", s.chain.Height(),
 			"other height", data.CurrentHeight,
 		)
+		s.markSynced()
 		return nil
 	}
+
+	s.setSyncTarget(data.CurrentHeight)
 
 	getBlocksMessage := &GetBlocksMessage{
 		From: s.chain.Height() + 1,
@@ -401,6 +522,7 @@ func (s *Server) processBlocksMessage(from NetAddr, data *BlocksMessage) error {
 	s.Logger.Log(
 		"msg", "successfully sync blocks",
 	)
+	s.markSyncProgressDone()
 	return nil
 }
 
@@ -412,10 +534,14 @@ func (s *Server) createNewBlock() error {
 
 	txs := s.memPool.Pending()
 
+	proposer := s.PrivateKey.PublicKey()
+
 	block, err := core.NewBlockFromPrevHeader(currentHeader, txs)
 	if err != nil {
 		return err
 	}
+
+	block.Header.Proposer = proposer.Address()
 
 	if err := block.Sign(*s.PrivateKey); err != nil {
 		return nil
@@ -430,4 +556,21 @@ func (s *Server) createNewBlock() error {
 	s.broadcastBlock(block)
 
 	return nil
+}
+
+func (s *Server) shouldPropose() bool {
+	if s.PrivateKey == nil {
+		return false
+	}
+
+	nextHeight := s.chain.Height() + 1
+	currentHeader, err := s.chain.GetHeader(s.chain.Height())
+	if err != nil {
+		return false
+	}
+
+	prevHash := core.BlockHasher{}.Hash(currentHeader)
+	proposer := s.chain.GetValidatorSet().Proposer(nextHeight, prevHash)
+
+	return proposer == s.PrivateKey.PublicKey().Address()
 }

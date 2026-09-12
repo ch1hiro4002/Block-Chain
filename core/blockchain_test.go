@@ -4,13 +4,16 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ch1hiro4002/Block-Chain/crypto"
 	"github.com/ch1hiro4002/Block-Chain/types"
 	"github.com/go-kit/log"
 	"github.com/stretchr/testify/assert"
 )
 
 func newBlockChainWithGenesis(t *testing.T) *BlockChain {
-	bc, err := NewBlockChain(log.NewLogfmtLogger(os.Stderr))
+	pubKey := crypto.GeneratePrivateKey().PublicKey()
+	stake := uint64(64)
+	bc, err := NewBlockChain(log.NewLogfmtLogger(os.Stderr), pubKey.Address(), pubKey, stake)
 
 	assert.Nil(t, err)
 	assert.Equal(t, bc.Height(), uint32(0))

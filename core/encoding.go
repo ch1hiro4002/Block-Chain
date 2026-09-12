@@ -19,6 +19,7 @@ type blockHeaderWire struct {
 	PrevBlockHash types.Hash
 	Timestamp     int64
 	Height        uint32
+	Proposer      types.Address
 }
 
 type transactionWire struct {
@@ -44,6 +45,7 @@ func headerToWire(h *Header) blockHeaderWire {
 		PrevBlockHash: h.PrevBlockHash,
 		Timestamp:     h.Timestamp,
 		Height:        h.Height,
+		Proposer:      h.Proposer,
 	}
 }
 
@@ -54,6 +56,7 @@ func headerFromWire(w blockHeaderWire) *Header {
 		PrevBlockHash: w.PrevBlockHash,
 		Timestamp:     w.Timestamp,
 		Height:        w.Height,
+		Proposer:      w.Proposer,
 	}
 }
 

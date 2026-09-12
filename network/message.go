@@ -73,3 +73,11 @@ func (m *BlocksMessage) GobDecode(data []byte) error {
 
 	return nil
 }
+
+type GetValidatorsMessage struct{}
+
+type ValidatorsMessage struct {
+	Height     uint32
+	Validators []core.ValidatorInfo
+	History    map[uint32][]core.ValidatorInfo
+}
