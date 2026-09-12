@@ -3,28 +3,35 @@ package core
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ch1hiro4002/Block-Chain/types"
 	"github.com/go-kit/log"
 )
 
+const (
+	MaxTransactionLifetime = 5 * time.Minute
+)
+
 type BlockChain struct {
-	logger    log.Logger
-	store     Storage
-	headers   []*Header
-	hashes    map[types.Hash]uint32
-	validator Validator
-	lock      sync.RWMutex
-	state     *State
+	logger        log.Logger
+	store         Storage
+	headers       []*Header
+	hashes        map[types.Hash]uint32
+	validator     Validator
+	lock          sync.RWMutex
+	state         *State
+	accountNonces map[types.Address]uint64
 }
 
 func NewBlockChain(logger log.Logger) (*BlockChain, error) {
 	bc := &BlockChain{
-		logger:  logger,
-		store:   NewMemoryStore(),
-		headers: []*Header{},
-		hashes:  make(map[types.Hash]uint32),
-		state:   NewState(),
+		logger:        logger,
+		store:         NewMemoryStore(),
+		headers:       []*Header{},
+		hashes:        make(map[types.Hash]uint32),
+		state:         NewState(),
+		accountNonces: make(map[types.Address]uint64),
 	}
 	bc.validator = NewBlockValidator(bc)
 
@@ -39,6 +46,26 @@ func NewBlockChain(logger log.Logger) (*BlockChain, error) {
 	return bc, nil
 }
 
+func (bc *BlockChain) ValidateTransaction(tx *Transaction, now time.Time) error {
+	if err := tx.Verify(); err != nil {
+		return err
+	}
+
+	if err := validateTxDeadline(tx, now); err != nil {
+		return err
+	}
+
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+
+	currentNonce := bc.accountNonces[tx.From.Address()]
+	if tx.Nonce != currentNonce {
+		return fmt.Errorf("invalid nonce: got %d, want %d", tx.Nonce, currentNonce)
+	}
+
+	return nil
+}
+
 func (bc *BlockChain) AddBlock(block *Block) error {
 	bc.lock.Lock()
 	defer bc.lock.Unlock()
@@ -49,18 +76,9 @@ func (bc *BlockChain) AddBlock(block *Block) error {
 	}
 
 	for _, tx := range block.Transactions {
-		bc.logger.Log(
-			"msg", "executing code",
-			"code length", len(tx.Data),
-			"tx hash", tx.Hash(TxHasher{}),
-		)
-
-		vm := NewVM(tx.Data, bc.state)
-		if err := vm.Run(); err != nil {
+		if err := bc.executeTransactionLocked(tx, time.Now()); err != nil {
 			return err
 		}
-
-		fmt.Printf("contract_state: %+v\n", vm.state)
 	}
 
 	return bc.addBlockWithoutValidation(block)
@@ -158,4 +176,58 @@ func (bc *BlockChain) getHeaderLocked(height uint32) (*Header, error) {
 	}
 
 	return bc.headers[height], nil
+}
+
+func (bc *BlockChain) executeTransactionLocked(tx *Transaction, now time.Time) error {
+	if err := bc.validateTransactionLocked(tx, now); err != nil {
+		return err
+	}
+
+	vm := NewVM(tx.Data, bc.state)
+	if err := vm.Run(); err != nil {
+		return err
+	}
+
+	bc.accountNonces[tx.From.Address()]++
+
+	return nil
+}
+
+func (bc *BlockChain) validateTransactionLocked(tx *Transaction, now time.Time) error {
+	if err := tx.Verify(); err != nil {
+		return err
+	}
+
+	if err := validateTxDeadline(tx, now); err != nil {
+		return err
+	}
+
+	expected := bc.accountNonces[tx.From.Address()]
+	if tx.Nonce != expected {
+		return fmt.Errorf(
+			"invalid nonce: got %d, want %d",
+			tx.Nonce,
+			expected,
+		)
+	}
+
+	return nil
+}
+
+func validateTxDeadline(tx *Transaction, now time.Time) error {
+	nowUnix := now.Unix()
+
+	if tx.Deadline == 0 {
+		return fmt.Errorf("transaction has no deadline")
+	}
+
+	if tx.Deadline <= nowUnix {
+		return fmt.Errorf("transaction has expired")
+	}
+
+	if tx.Deadline-nowUnix > int64(MaxTransactionLifetime/time.Second) {
+		return fmt.Errorf("transaction deadline is too far in the future")
+	}
+
+	return nil
 }

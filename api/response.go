@@ -15,6 +15,9 @@ type SignatureResponse struct {
 
 type TransactionResponse struct {
 	Hash      string             `json:"hash"`
+	Nonce     uint64             `json:"nonce"`
+	Timestamp int64              `json:"timestamp"`
+	Deadline  int64              `json:"deadline"`
 	Data      string             `json:"data"`
 	From      string             `json:"from"`
 	Signature *SignatureResponse `json:"signature"`
@@ -23,7 +26,7 @@ type TransactionResponse struct {
 type BlockResponse struct {
 	Hash          string                `json:"hash"`
 	Version       uint32                `json:"version"`
-	TxHash        string                `json:"txHash"`
+	DataHash      string                `json:"dataHash"`
 	PrevBlockHash string                `json:"prevBlockHash"`
 	Timestamp     int64                 `json:"timestamp"`
 	Height        uint32                `json:"height"`
@@ -43,7 +46,7 @@ func NewBlockResponse(block *core.Block) (*BlockResponse, error) {
 	response := &BlockResponse{
 		Hash:          block.Hash(core.BlockHasher{}).String(),
 		Version:       block.Version,
-		TxHash:        block.TxHash.String(),
+		DataHash:      block.DataHash.String(),
 		PrevBlockHash: block.PrevBlockHash.String(),
 		Timestamp:     block.Timestamp,
 		Height:        block.Height,
@@ -76,9 +79,12 @@ func newTransactionResponse(tx *core.Transaction) (TransactionResponse, error) {
 	}
 
 	response := TransactionResponse{
-		Hash: tx.Hash(core.TxHasher{}).String(),
-		Data: hex.EncodeToString(tx.Data),
-		From: tx.From.Address().String(),
+		Hash:      tx.Hash(core.TxHasher{}).String(),
+		Nonce:     tx.Nonce,
+		Timestamp: tx.Timestamp,
+		Deadline:  tx.Deadline,
+		Data:      hex.EncodeToString(tx.Data),
+		From:      tx.From.Address().String(),
 	}
 
 	if tx.Signature != nil {

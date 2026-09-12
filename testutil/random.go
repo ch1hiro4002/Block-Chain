@@ -23,7 +23,7 @@ func RandomHash() types.Hash {
 
 // NewRandomTransaction return a new random transaction whithout signature.
 func NewRandomTransaction(size int) *core.Transaction {
-	return core.NewTransaction(RandomBytes(size))
+	return core.NewTransaction(1, 0, 10, RandomBytes(size))
 }
 
 func NewRandomTransactionWithSignature(t *testing.T, privKey crypto.PrivateKey, size int) *core.Transaction {
@@ -45,7 +45,7 @@ func NewRandomBlock(t *testing.T, height uint32, prevBlockHash types.Hash) *core
 	assert.Nil(t, err)
 	dataHash, err := core.CalculateDataHash(b.Transactions)
 	assert.Nil(t, err)
-	b.Header.TxHash = dataHash
+	b.Header.DataHash = dataHash
 
 	return b
 }

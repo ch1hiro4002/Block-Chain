@@ -56,7 +56,7 @@ func randomBlock(t *testing.T, height uint32, prevBlockHash types.Hash) *Block {
 
 	header := &Header{
 		Version:       1,
-		TxHash:        types.Hash{},
+		DataHash:        types.Hash{},
 		PrevBlockHash: prevBlockHash,
 		Timestamp:     time.Now().Unix(),
 		Height:        height,
@@ -69,7 +69,7 @@ func randomBlock(t *testing.T, height uint32, prevBlockHash types.Hash) *Block {
 
 	dataHash, err := CalculateDataHash(block.Transactions)
 	assert.Nil(t, err)
-	block.TxHash = dataHash
+	block.DataHash = dataHash
 
 	assert.Nil(t, block.Sign(privKey))
 

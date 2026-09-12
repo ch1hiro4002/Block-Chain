@@ -13,7 +13,7 @@ import (
 
 type Header struct {
 	Version       uint32
-	TxHash        types.Hash
+	DataHash      types.Hash
 	PrevBlockHash types.Hash
 	Timestamp     int64
 	Height        uint32
@@ -42,7 +42,7 @@ func NewBlockFromPrevHeader(prevHeader *Header, txs []*Transaction) (*Block, err
 
 	header := &Header{
 		Version:       1,
-		TxHash:        txHash,
+		DataHash:      txHash,
 		PrevBlockHash: BlockHasher{}.Hash(prevHeader),
 		Timestamp:     time.Now().UnixNano(),
 		Height:        prevHeader.Height + 1,
@@ -58,7 +58,7 @@ func (b *Block) AddTransaction(tx *Transaction) {
 func (h *Header) Bytes() []byte {
 	buf := &bytes.Buffer{}
 	enc := gob.NewEncoder(buf)
-	enc.Encode(h)
+	enc.Encode(headerToWire(h))
 
 	return buf.Bytes()
 }
@@ -95,7 +95,7 @@ func (b *Block) Verify() error {
 		return fmt.Errorf("failed to calculate datahash: %v", err)
 	}
 
-	if txHash != b.TxHash {
+	if txHash != b.DataHash {
 		return fmt.Errorf("block (%s) has an invalid data hash", b.Hash(BlockHasher{}))
 	}
 
@@ -118,24 +118,22 @@ func (b *Block) Hash(hasher Hasher[*Header]) types.Hash {
 	return b.hash
 }
 
-func CalculateDataHash(txs []*Transaction) (hash types.Hash, err error) {
+func CalculateDataHash(txs []*Transaction) (types.Hash, error) {
 	buf := &bytes.Buffer{}
 
 	for _, tx := range txs {
-		if err = tx.Encode(NewGobTxEncoder(buf)); err != nil {
-			return
+		if _, err := buf.Write(tx.Hash(TxHasher{}).Bytes()); err != nil {
+			return types.Hash{}, err
 		}
 	}
 
-	hash = sha256.Sum256(buf.Bytes())
-
-	return
+	return sha256.Sum256(buf.Bytes()), nil
 }
 
 func newGenesisBlock() (*Block, error) {
 	header := &Header{
 		Version:       1,
-		TxHash:        types.Hash{},
+		DataHash:      types.Hash{},
 		PrevBlockHash: types.Hash{},
 		Timestamp:     0,
 		Height:        0,

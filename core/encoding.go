@@ -15,13 +15,16 @@ type Encoder[T any] interface {
 
 type blockHeaderWire struct {
 	Version       uint32
-	TxHash        types.Hash
+	DataHash      types.Hash
 	PrevBlockHash types.Hash
 	Timestamp     int64
 	Height        uint32
 }
 
-type blockTransactionWire struct {
+type transactionWire struct {
+	Nonce     uint64
+	Timestamp int64
+	Deadline  int64
 	Data      []byte
 	From      crypto.PublicKey
 	Signature *crypto.Signature
@@ -29,9 +32,51 @@ type blockTransactionWire struct {
 
 type blockWire struct {
 	Header       blockHeaderWire
-	Transactions []blockTransactionWire
+	Transactions []transactionWire
 	Validator    crypto.PublicKey
 	Signature    *crypto.Signature
+}
+
+func headerToWire(h *Header) blockHeaderWire {
+	return blockHeaderWire{
+		Version:       h.Version,
+		DataHash:      h.DataHash,
+		PrevBlockHash: h.PrevBlockHash,
+		Timestamp:     h.Timestamp,
+		Height:        h.Height,
+	}
+}
+
+func headerFromWire(w blockHeaderWire) *Header {
+	return &Header{
+		Version:       w.Version,
+		DataHash:      w.DataHash,
+		PrevBlockHash: w.PrevBlockHash,
+		Timestamp:     w.Timestamp,
+		Height:        w.Height,
+	}
+}
+
+func transactionToWire(tx *Transaction) transactionWire {
+	return transactionWire{
+		Nonce:     tx.Nonce,
+		Timestamp: tx.Timestamp,
+		Deadline:  tx.Deadline,
+		Data:      tx.Data,
+		From:      tx.From,
+		Signature: tx.Signature,
+	}
+}
+
+func transactionFromWire(w transactionWire) *Transaction {
+	return &Transaction{
+		Nonce:     w.Nonce,
+		Timestamp: w.Timestamp,
+		Deadline:  w.Deadline,
+		Data:      w.Data,
+		From:      w.From,
+		Signature: w.Signature,
+	}
 }
 
 type GobBlockEncoder struct {
@@ -53,14 +98,8 @@ func (e *GobBlockEncoder) Encode(block *Block) error {
 	}
 
 	wire := blockWire{
-		Header: blockHeaderWire{
-			Version:       block.Version,
-			TxHash:        block.TxHash,
-			PrevBlockHash: block.PrevBlockHash,
-			Timestamp:     block.Timestamp,
-			Height:        block.Height,
-		},
-		Transactions: make([]blockTransactionWire, 0, len(block.Transactions)),
+		Header:       headerToWire(block.Header),
+		Transactions: make([]transactionWire, 0, len(block.Transactions)),
 	}
 
 	wire.Validator = block.Validator
@@ -74,14 +113,32 @@ func (e *GobBlockEncoder) Encode(block *Block) error {
 			return fmt.Errorf("cannot encode block with nil transaction")
 		}
 
-		wire.Transactions = append(wire.Transactions, blockTransactionWire{
-			Data:      tx.Data,
-			From:      tx.From,
-			Signature: tx.Signature,
-		})
+		wire.Transactions = append(wire.Transactions, transactionToWire(tx))
 	}
 
 	return gob.NewEncoder(e.w).Encode(wire)
+}
+
+type GobTxEncoder struct {
+	w io.Writer
+}
+
+func NewGobTxEncoder(w io.Writer) *GobTxEncoder {
+	return &GobTxEncoder{
+		w: w,
+	}
+}
+
+func (e *GobTxEncoder) Encode(tx *Transaction) error {
+	if tx == nil {
+		return fmt.Errorf("cannot encode nil transaction")
+	}
+
+	return gob.NewEncoder(e.w).Encode(transactionToWire(tx))
+}
+
+type Decoder[T any] interface {
+	Decode(T) error
 }
 
 type GobBlockDecoder struct {
@@ -104,58 +161,18 @@ func (e *GobBlockDecoder) Decode(block *Block) error {
 		return err
 	}
 
-	block.Header = &Header{
-		Version:       wire.Header.Version,
-		TxHash:        wire.Header.TxHash,
-		PrevBlockHash: wire.Header.PrevBlockHash,
-		Timestamp:     wire.Header.Timestamp,
-		Height:        wire.Header.Height,
-	}
+	block.Header = headerFromWire(wire.Header)
 	block.Validator = wire.Validator
 
 	block.Signature = wire.Signature
+	block.hash = types.Hash{}
 
 	block.Transactions = make([]*Transaction, 0, len(wire.Transactions))
 	for _, txWire := range wire.Transactions {
-		tx := &Transaction{
-			Data: txWire.Data,
-			From: txWire.From,
-		}
-
-		tx.Signature = txWire.Signature
-
-		block.Transactions = append(block.Transactions, tx)
+		block.Transactions = append(block.Transactions, transactionFromWire(txWire))
 	}
 
 	return nil
-}
-
-type GobTxEncoder struct {
-	w io.Writer
-}
-
-func NewGobTxEncoder(w io.Writer) *GobTxEncoder {
-	return &GobTxEncoder{
-		w: w,
-	}
-}
-
-func (e *GobTxEncoder) Encode(tx *Transaction) error {
-	w := struct {
-		Data      []byte
-		From      crypto.PublicKey
-		Signature *crypto.Signature
-	}{
-		Data:      tx.Data,
-		From:      tx.From,
-		Signature: tx.Signature,
-	}
-
-	return gob.NewEncoder(e.w).Encode(w)
-}
-
-type Decoder[T any] interface {
-	Decode(T) error
 }
 
 type GobTxDecoder struct {
@@ -169,20 +186,16 @@ func NewGobTxDecoder(r io.Reader) *GobTxDecoder {
 }
 
 func (d *GobTxDecoder) Decode(tx *Transaction) error {
-	w := struct {
-		Data      []byte
-		From      crypto.PublicKey
-		Signature *crypto.Signature
-	}{}
+	if tx == nil {
+		return fmt.Errorf("cannot decode into nil transaction")
+	}
 
+	var w transactionWire
 	if err := gob.NewDecoder(d.r).Decode(&w); err != nil {
 		return err
 	}
 
-	tx.Data = w.Data
-	tx.From = w.From
-
-	tx.Signature = w.Signature
+	*tx = *transactionFromWire(w)
 
 	return nil
 }

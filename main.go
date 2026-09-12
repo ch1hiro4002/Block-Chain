@@ -55,7 +55,7 @@ func txSender() {
 
 	contractData := []byte{0x03, 0x0a, 0x02, 0x0a, 0x0c, 0x46, 0x0b, 0x4f, 0x0b, 0x4f, 0x0b, 0x03, 0x0a, 0x10, 0x11}
 
-	tx := core.NewTransaction(contractData)
+	tx := core.NewTransaction(0, time.Now().Unix(), time.Now().Unix()+100,contractData)
 	tx.Sign(privKey)
 
 	buf := &bytes.Buffer{}

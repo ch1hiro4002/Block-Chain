@@ -193,6 +193,10 @@ func (s *Server) processTransaction(tx *core.Transaction) error {
 		return err
 	}
 
+	if err := s.chain.ValidateTransaction(tx, time.Now()); err != nil {
+		return err
+	}
+
 	s.memPool.AddTransaction(tx)
 
 	s.Logger.Log(

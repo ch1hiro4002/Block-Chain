@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/gob"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 
@@ -82,11 +82,6 @@ type Signature struct {
 	r, s *big.Int
 }
 
-type signatureWire struct {
-	R []byte
-	S []byte
-}
-
 func (sig Signature) R() *big.Int {
 	if sig.r == nil {
 		return nil
@@ -102,31 +97,73 @@ func (sig Signature) S() *big.Int {
 }
 
 func (sig Signature) GobEncode() ([]byte, error) {
-	w := signatureWire{}
-	if sig.r != nil {
-		w.R = sig.r.Bytes()
-	}
-	if sig.s != nil {
-		w.S = sig.s.Bytes()
-	}
-
 	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(w); err != nil {
-		return nil, err
-	}
+
+	writeSignatureInt(&buf, sig.r)
+	writeSignatureInt(&buf, sig.s)
 
 	return buf.Bytes(), nil
 }
 
 func (sig *Signature) GobDecode(data []byte) error {
-	var w signatureWire
-	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(&w); err != nil {
+	r, rest, err := readSignatureInt(data)
+	if err != nil {
 		return err
 	}
 
-	sig.r = new(big.Int).SetBytes(w.R)
-	sig.s = new(big.Int).SetBytes(w.S)
+	s, rest, err := readSignatureInt(rest)
+	if err != nil {
+		return err
+	}
+
+	if len(rest) != 0 {
+		return fmt.Errorf("invalid signature encoding: trailing bytes")
+	}
+
+	sig.r = r
+	sig.s = s
+
 	return nil
+}
+
+func writeSignatureInt(buf *bytes.Buffer, v *big.Int) {
+	if v == nil {
+		buf.WriteByte(0)
+		return
+	}
+
+	b := v.Bytes()
+	buf.WriteByte(1)
+
+	var length [8]byte
+	binary.BigEndian.PutUint64(length[:], uint64(len(b)))
+	buf.Write(length[:])
+	buf.Write(b)
+}
+
+func readSignatureInt(data []byte) (*big.Int, []byte, error) {
+	if len(data) == 0 {
+		return nil, nil, fmt.Errorf("invalid signature encoding: missing value flag")
+	}
+
+	if data[0] == 0 {
+		return nil, data[1:], nil
+	}
+
+	if len(data) < 9 {
+		return nil, nil, fmt.Errorf("invalid signature encoding: truncated length")
+	}
+
+	length := binary.BigEndian.Uint64(data[1:9])
+	if length > uint64(len(data)-9) {
+		return nil, nil, fmt.Errorf("invalid signature encoding: length out of range")
+	}
+
+	start := 9
+	end := start + int(length)
+	value := new(big.Int).SetBytes(data[start:end])
+
+	return value, data[end:], nil
 }
 
 func GeneratePrivateKey() PrivateKey {
