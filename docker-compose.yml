@@ -1,0 +1,47 @@
+services:
+  local:
+    build: .
+    container_name: bc-local
+    environment:
+      NODE_ID: LOCAL
+      LISTEN_ADDR: ":3000"
+      API_LISTEN_ADDR: ":9999"
+      STAKE: "100"
+      BLOCK_TIME: "2s"
+    ports:
+      - "3000:3000"
+      - "9999:9999"
+
+  remote:
+    build: .
+    container_name: bc-remote
+    environment:
+      NODE_ID: REMOTE
+      LISTEN_ADDR: ":4000"
+      API_LISTEN_ADDR: ":9998"
+      SEED_NODES: "local:3000"
+      STAKE: "1000"
+      BLOCK_TIME: "2s"
+    ports:
+      - "4000:4000"
+      - "9998:9998"
+    depends_on:
+      - local
+
+  late:
+    build: .
+    container_name: bc-late
+    environment:
+      NODE_ID: LATE
+      LISTEN_ADDR: ":5000"
+      API_LISTEN_ADDR: ":9997"
+      SEED_NODES: "local:3000,remote:4000"
+      STAKE: "10000"
+      BLOCK_TIME: "2s"
+      START_DELAY: "10s"
+    ports:
+      - "5000:5000"
+      - "9997:9997"
+    depends_on:
+      - local
+      - remote

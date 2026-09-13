@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"net"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ch1hiro4002/Block-Chain/core"
@@ -12,22 +15,54 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+			return v
+	}
+	return def
+}
+
 func main() {
-	privKey_1 := crypto.GeneratePrivateKey()
-	localNode := makeServer("LOCAL", &privKey_1, []string{}, ":3000", ":9999", 100)
-	go localNode.Strat()
+	nodeID := envOr("NODE_ID", "NODE")
+	listenAddr := envOr("LISTEN_ADDR", ":3000")
+	apiListenAddr := envOr("API_LISTEN_ADDR", "")
+	blockTime, _ := time.ParseDuration(envOr("BLOCK_TIME", "2s"))
+	startDelay, _ := time.ParseDuration(envOr("START_DELAY", "0s"))
+	stake, _ := strconv.ParseUint(envOr("STAKE", "100"), 10, 64)
 
-	privKey_2 := crypto.GeneratePrivateKey()
-	remoteNode := makeServer("REMOTE", &privKey_2, []string{"127.0.0.1:3000"}, ":4000", ":9998", 1000)
-	go remoteNode.Strat()
+	var seedNodes []string
+	if raw := os.Getenv("SEED_NODES"); raw != "" {
+			for _, s := range strings.Split(raw, ",") {
+					if s = strings.TrimSpace(s); s != "" {
+							seedNodes = append(seedNodes, s)
+					}
+			}
+	}
 
-	time.Sleep(10 * time.Second)
+	privKey := crypto.GeneratePrivateKey()
+	pubKey := privKey.PublicKey()
 
-	privKey_3 := crypto.GeneratePrivateKey()
-	lateNode := makeServer("LATE", &privKey_3, []string{"127.0.0.1:3000", "127.0.0.1:4000"}, ":5000", ":9997", 10000)
-	go lateNode.Strat()
+	opts := network.ServerOpts{
+			ID:            nodeID,
+			PrivateKey:    &privKey,
+			TCPTransport:  network.NewTCPTransport(listenAddr),
+			SeedNodes:     seedNodes,
+			ListenAddr:    listenAddr,
+			APIListenAddr: apiListenAddr,
+			BlockTime:     blockTime,
+	}
 
-	select{}
+	srv, err := network.NewServer(opts, pubKey.Address(), pubKey, stake)
+	if err != nil {
+			logrus.Fatal(err)
+	}
+
+	if startDelay > 0 {
+			logrus.Infof("node %s sleeping %s before start", nodeID, startDelay)
+			time.Sleep(startDelay)
+	}
+
+	srv.Strat()
 }
 
 func makeServer(id string, privKey *crypto.PrivateKey, seedNodes []string, listenAddr string, apiListenAddr string, stake uint64) *network.Server {

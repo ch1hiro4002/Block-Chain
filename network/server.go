@@ -184,14 +184,24 @@ free:
 
 func (s *Server) bootstrapNetwork() {
 	for _, nodeAddr := range s.SeedNodes {
-		conn, err := net.Dial("tcp", nodeAddr)
-		if err != nil {
-			fmt.Printf("failed to connect: %v", err)
-			continue
+		go s.connectToSeed(nodeAddr)
+	}
+}
+
+func (s *Server) connectToSeed(nodeAddr string) {
+	backoff := 500 * time.Millisecond
+	for {
+		conn, err := net.DialTimeout("tcp", nodeAddr, 3*time.Second)
+		if err == nil {
+			s.peerCh <- &TCPPeer{conn: conn}
+			s.Logger.Log("msg", "connected to seed", "addr", nodeAddr)
+			return
 		}
 
-		s.peerCh <- &TCPPeer{
-			conn: conn,
+		s.Logger.Log("msg", "failed to connect to seed, retrying", "addr", nodeAddr, "err", err, "backoff", backoff)
+		time.Sleep(backoff)
+		if backoff < 5*time.Second {
+			backoff *= 2
 		}
 	}
 }
