@@ -7,8 +7,8 @@ import (
 
 	"github.com/ch1hiro4002/Block-Chain/core"
 	"github.com/ch1hiro4002/Block-Chain/types"
+	"github.com/gin-gonic/gin"
 	"github.com/go-kit/log"
-	"github.com/labstack/echo/v5"
 	"github.com/sirupsen/logrus"
 )
 
@@ -36,79 +36,92 @@ func NewServer(config ServerConfig, blockchain *core.BlockChain, transactions Tr
 }
 
 func (s *Server) Start() error {
-	e := echo.New()
+	router := gin.Default()
 
-	e.GET("/blocks/:blockIDorHash", s.HandleGetBlock)
-	e.GET("/tx/:txHash", s.HandleGetTransaction)
+	router.GET("/blocks/:blockIDorHash", s.HandleGetBlock)
+	router.GET("/tx/:txHash", s.HandleGetTransaction)
 
-	return e.Start(s.ListenAddr)
+	return router.Run(s.ListenAddr)
 }
 
-func (s *Server) HandleGetTransaction(context *echo.Context) error {
-	txHash := context.Param("txHash")
+func (s *Server) HandleGetTransaction(ctx *gin.Context) {
+	txHash := ctx.Param("txHash")
 
 	if len(txHash) != 64 {
 		logrus.Errorf("invalid transaction hash %q", txHash)
-		return context.JSON(http.StatusBadRequest, map[string]any{"error": "invalid transaction hash"})
+		ctx.JSON(http.StatusBadRequest, map[string]any{"error": "invalid transaction hash"})
+		return
 	}
 
 	hashBytes, err := hex.DecodeString(txHash)
 	if err != nil {
 		logrus.Errorf("invalid transaction hash %q: %v", txHash, err)
-		return context.JSON(http.StatusBadRequest, map[string]any{"error": "invalid transaction hash"})
+		ctx.JSON(http.StatusBadRequest, map[string]any{"error": "invalid transaction hash"})
+		return
 	}
 
 	tx := s.transactions.Get(types.HashFromBytes(hashBytes))
 	if tx == nil {
-		return context.JSON(http.StatusNotFound, map[string]any{"error": "transaction not found"})
+		ctx.JSON(http.StatusNotFound, map[string]any{"error": "transaction not found"})
+		return
 	}
 
 	response, err := newTransactionResponse(tx)
 	if err != nil {
 		logrus.Errorf("failed to serialize transaction %s: %v", txHash, err)
-		return context.JSON(http.StatusInternalServerError, map[string]any{"error": "failed to serialize transaction"})
+		ctx.JSON(http.StatusInternalServerError, map[string]any{"error": "failed to serialize transaction"})
+		return
 	}
 
-	return context.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, response)
 }
 
-func (s *Server) HandleGetBlock(context *echo.Context) error {
-	blockIDorHash := context.Param("blockIDorHash")
+func (s *Server) HandleGetBlock(ctx *gin.Context) {
+	blockIDorHash := ctx.Param("blockIDorHash")
 
 	if len(blockIDorHash) == 64 {
 		hashBytes, err := hex.DecodeString(blockIDorHash)
-		if err == nil {
-			block, err := s.blockchain.GetBlockWithHash(types.HashFromBytes(hashBytes))
-			if err != nil {
-				logrus.Errorf("failed to get block with hash %s: %v", blockIDorHash, err)
-				return context.JSON(http.StatusNotFound, map[string]any{"error": err.Error()})
-			}
-
-			return s.writeBlockResponse(context, blockIDorHash, block)
+		if err != nil {
+			logrus.Errorf("invalid block hash %q: %v", blockIDorHash, err)
+			ctx.JSON(http.StatusBadRequest, map[string]any{"error": "invalid block hash"})
+			return
 		}
+
+		block, err := s.blockchain.GetBlockWithHash(types.HashFromBytes(hashBytes))
+		if err != nil {
+			logrus.Errorf("failed to get block with hash %s: %v", blockIDorHash, err)
+			ctx.JSON(http.StatusNotFound, map[string]any{"error": err.Error()})
+			return
+		}
+
+		s.writeBlockResponse(ctx, blockIDorHash, block)
+		return
 	}
 
 	height, err := strconv.Atoi(blockIDorHash)
 	if err != nil || height < 0 {
 		logrus.Errorf("invalid block ID %q: %v", blockIDorHash, err)
-		return context.JSON(http.StatusBadRequest, map[string]any{"error": "invalid block ID"})
+		ctx.JSON(http.StatusBadRequest, map[string]any{"error": "invalid block ID"})
+		return
 	}
 
 	block, err := s.blockchain.GetBlockWithHeight(uint32(height))
 	if err != nil {
 		logrus.Errorf("failed to get block at height %d: %v", height, err)
-		return context.JSON(http.StatusNotFound, map[string]any{"error": err.Error()})
+		ctx.JSON(http.StatusNotFound, map[string]any{"error": err.Error()})
+		return
 	}
 
-	return s.writeBlockResponse(context, blockIDorHash, block)
+	s.writeBlockResponse(ctx, blockIDorHash, block)
 }
 
-func (s *Server) writeBlockResponse(context *echo.Context, blockID string, block *core.Block) error {
+func (s *Server) writeBlockResponse(ctx *gin.Context, blockID string, block *core.Block) {
 	response, err := NewBlockResponse(block)
 	if err != nil {
 		logrus.Errorf("failed to serialize block %s: %v", blockID, err)
-		return context.JSON(http.StatusInternalServerError, map[string]any{"error": "failed to serialize block"})
+		ctx.JSON(http.StatusInternalServerError, map[string]any{"error": "failed to serialize block"})
+		return
 	}
 
-	return context.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, response)
 }
