@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ch1hiro4002/Block-Chain/crypto"
-	"github.com/ch1hiro4002/Block-Chain/types"
+	"ch1hiro4002/blockchain/crypto"
+	"ch1hiro4002/blockchain/types"
 	"github.com/go-kit/log"
 )
 
@@ -28,6 +28,14 @@ type BlockChain struct {
 }
 
 func NewBlockChain(logger log.Logger, addr types.Address, pubKey crypto.PublicKey, stake uint64) (*BlockChain, error) {
+	return newBlockChain(logger, addr, pubKey, stake, true)
+}
+
+func NewNonValidatorBlockChain(logger log.Logger) (*BlockChain, error) {
+	return newBlockChain(logger, types.Address{}, crypto.PublicKey{}, 0, false)
+}
+
+func newBlockChain(logger log.Logger, addr types.Address, pubKey crypto.PublicKey, stake uint64, includeSelf bool) (*BlockChain, error) {
 	bc := &BlockChain{
 		logger:              logger,
 		store:               NewMemoryStore(),
@@ -40,7 +48,9 @@ func NewBlockChain(logger log.Logger, addr types.Address, pubKey crypto.PublicKe
 	bv := NewBlockValidator(addr, pubKey, stake, bc)
 	bc.validator = bv
 	bc.validatorSet = NewValidatorSet()
-	bc.validatorSet.Add(*bv)
+	if includeSelf {
+		bc.validatorSet.Add(*bv)
+	}
 
 	genesis, err := newGenesisBlock()
 	if err != nil {

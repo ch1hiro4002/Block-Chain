@@ -1,8 +1,8 @@
 build:
-	go build -o ./bin/Block-Chain
+	CGO_ENABLED=0 go build -o ./bin/blockchain .
 
 run: build
-	./bin/Block-Chain
+	./bin/blockchain
 
 test:
 	go test -v ./...

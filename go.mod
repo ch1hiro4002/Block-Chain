@@ -1,4 +1,4 @@
-module github.com/ch1hiro4002/Block-Chain
+module ch1hiro4002/blockchain
 
 go 1.26.5
 

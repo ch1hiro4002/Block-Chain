@@ -20,7 +20,8 @@ services:
       LISTEN_ADDR: ":4000"
       API_LISTEN_ADDR: ":9998"
       SEED_NODES: "local:3000"
-      STAKE: "1000"
+      HAS_PRIVATE_KEY: "false"
+      STAKE: "0"
       BLOCK_TIME: "2s"
     ports:
       - "4000:4000"

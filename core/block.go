@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ch1hiro4002/Block-Chain/crypto"
-	"github.com/ch1hiro4002/Block-Chain/types"
+	"ch1hiro4002/blockchain/crypto"
+	"ch1hiro4002/blockchain/types"
 )
 
 type Header struct {

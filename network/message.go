@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 
-	"github.com/ch1hiro4002/Block-Chain/core"
+	"ch1hiro4002/blockchain/core"
 )
 
 type GetStatusMessage struct{}

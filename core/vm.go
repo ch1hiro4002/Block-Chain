@@ -3,7 +3,7 @@ package core
 import (
 	"fmt"
 
-	"github.com/ch1hiro4002/Block-Chain/util"
+	"ch1hiro4002/blockchain/util"
 )
 
 type Instruction byte

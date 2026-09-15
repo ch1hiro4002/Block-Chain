@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/ch1hiro4002/Block-Chain/core"
-	"github.com/ch1hiro4002/Block-Chain/types"
+	"ch1hiro4002/blockchain/core"
+	"ch1hiro4002/blockchain/types"
 	"github.com/gin-gonic/gin"
 	"github.com/go-kit/log"
 	"github.com/sirupsen/logrus"

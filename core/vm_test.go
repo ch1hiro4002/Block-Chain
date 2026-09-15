@@ -3,7 +3,7 @@ package core
 import (
 	"testing"
 
-	"github.com/ch1hiro4002/Block-Chain/util"
+	"ch1hiro4002/blockchain/util"
 	"github.com/stretchr/testify/assert"
 )
 

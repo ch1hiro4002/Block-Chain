@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ch1hiro4002/Block-Chain/types"
+	"ch1hiro4002/blockchain/types"
 )
 
 type PrivateKey struct {

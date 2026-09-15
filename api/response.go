@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/ch1hiro4002/Block-Chain/core"
-	"github.com/ch1hiro4002/Block-Chain/crypto"
+	"ch1hiro4002/blockchain/core"
+	"ch1hiro4002/blockchain/crypto"
 )
 
 type SignatureResponse struct {

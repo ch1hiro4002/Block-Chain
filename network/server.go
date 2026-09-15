@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ch1hiro4002/Block-Chain/api"
-	"github.com/ch1hiro4002/Block-Chain/core"
-	"github.com/ch1hiro4002/Block-Chain/crypto"
-	"github.com/ch1hiro4002/Block-Chain/types"
+	"ch1hiro4002/blockchain/api"
+	"ch1hiro4002/blockchain/core"
+	"ch1hiro4002/blockchain/crypto"
+	"ch1hiro4002/blockchain/types"
 	"github.com/go-kit/log"
 )
 
@@ -60,7 +60,15 @@ func NewServer(opts ServerOpts, addr types.Address, pubKey crypto.PublicKey, sta
 		opts.Logger = log.With(opts.Logger, "ID", opts.ID)
 	}
 
-	blockchain, err := core.NewBlockChain(opts.Logger, addr, pubKey, stake)
+	var (
+		blockchain *core.BlockChain
+		err        error
+	)
+	if opts.PrivateKey != nil {
+		blockchain, err = core.NewBlockChain(opts.Logger, addr, pubKey, stake)
+	} else {
+		blockchain, err = core.NewNonValidatorBlockChain(opts.Logger)
+	}
 	if err != nil {
 		return nil, err
 	}

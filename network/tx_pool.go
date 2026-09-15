@@ -3,8 +3,8 @@ package network
 import (
 	"sync"
 
-	"github.com/ch1hiro4002/Block-Chain/core"
-	"github.com/ch1hiro4002/Block-Chain/types"
+	"ch1hiro4002/blockchain/core"
+	"ch1hiro4002/blockchain/types"
 )
 
 type TxPool struct {

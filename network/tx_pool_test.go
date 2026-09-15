@@ -3,8 +3,8 @@ package network
 import (
 	"testing"
 
-	"github.com/ch1hiro4002/Block-Chain/core"
-	"github.com/ch1hiro4002/Block-Chain/testutil"
+	"ch1hiro4002/blockchain/core"
+	"ch1hiro4002/blockchain/testutil"
 	"github.com/stretchr/testify/assert"
 )
 

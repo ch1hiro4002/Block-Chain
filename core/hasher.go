@@ -3,7 +3,7 @@ package core
 import (
 	"crypto/sha256"
 
-	"github.com/ch1hiro4002/Block-Chain/types"
+	"ch1hiro4002/blockchain/types"
 )
 
 type Hasher[T any] interface {

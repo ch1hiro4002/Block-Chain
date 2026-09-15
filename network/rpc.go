@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ch1hiro4002/Block-Chain/core"
+	"ch1hiro4002/blockchain/core"
 	"github.com/sirupsen/logrus"
 )
 

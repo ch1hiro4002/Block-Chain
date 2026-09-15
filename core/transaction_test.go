@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/ch1hiro4002/Block-Chain/crypto"
+	"ch1hiro4002/blockchain/crypto"
 	"github.com/stretchr/testify/assert"
 )
 
